@@ -50,6 +50,9 @@ importers:
       '@olympus/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@olympus/openai':
+        specifier: workspace:*
+        version: link:../../packages/openai
       '@olympus/reference':
         specifier: workspace:*
         version: link:../../packages/reference
@@ -76,6 +79,18 @@ importers:
       '@types/better-sqlite3':
         specifier: ^9.6.0
         version: 9.6.0
+
+  packages/openai:
+    dependencies:
+      '@olympus/athena':
+        specifier: workspace:*
+        version: link:../athena
+      '@olympus/core':
+        specifier: workspace:*
+        version: link:../core
+      openai:
+        specifier: ^7.5.0
+        version: 7.5.0
 
   packages/reference:
     dependencies:
@@ -1016,6 +1031,27 @@ packages:
     resolution: {integrity: sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA==}
     engines: {node: '>=12.20.0'}
 
+  openai@7.5.0:
+    resolution: {integrity: sha512-ZbDBz8FSB8Mv8fFYIUvzTFMdV5vl93/octp1MdtK2lfYepSpfv/ewmeugpKz/cwGtFSx+YuUM4NwpZ2P55YiPA==}
+    engines: {node: '>=22.0.0'}
+    peerDependencies:
+      '@aws-sdk/credential-provider-node': '>=3.972.0 <4'
+      '@smithy/hash-node': '>=4.3.0 <5'
+      '@smithy/signature-v4': '>=5.4.0 <6'
+      ws: ^8.18.0
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      '@aws-sdk/credential-provider-node':
+        optional: true
+      '@smithy/hash-node':
+        optional: true
+      '@smithy/signature-v4':
+        optional: true
+      ws:
+        optional: true
+      zod:
+        optional: true
+
   package-manager-detector@1.8.0:
     resolution: {integrity: sha512-yQA4H19AmPEoMUeavPMDIe1higySl/gH/yaQrkT/s07Qp+7pp2hYz30N3z2l5BkjVkF9Ow6o0wjJamm2y7Sn0A==}
 
@@ -1845,6 +1881,8 @@ snapshots:
   node-addon-api@8.9.2: {}
 
   obug@2.1.4: {}
+
+  openai@7.5.0: {}
 
   package-manager-detector@1.8.0: {}
 

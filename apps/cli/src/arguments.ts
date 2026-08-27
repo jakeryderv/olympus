@@ -3,6 +3,7 @@ export type CliCommand =
       readonly kind: "run";
       readonly objective: string;
       readonly model: string;
+      readonly openAIModel?: string;
       readonly tools: string;
       readonly root: string;
       readonly database: string;
@@ -29,6 +30,7 @@ interface ParsedArguments {
   readonly json: boolean;
   readonly ephemeral: boolean;
   readonly model: string;
+  readonly openAIModel?: string;
   readonly tools: string;
   readonly root: string;
   readonly database: string;
@@ -36,7 +38,14 @@ interface ParsedArguments {
   readonly help: boolean;
 }
 
-const valueOptions = new Set(["--model", "--tools", "--root", "--db", "--thread-id"]);
+const valueOptions = new Set([
+  "--model",
+  "--openai-model",
+  "--tools",
+  "--root",
+  "--db",
+  "--thread-id",
+]);
 
 function parseFlags(args: readonly string[], cwd: string): ParsedArguments {
   const positionals: string[] = [];
@@ -44,6 +53,7 @@ function parseFlags(args: readonly string[], cwd: string): ParsedArguments {
   let ephemeral = false;
   let help = false;
   let model = "inspection";
+  let openAIModel: string | undefined;
   let tools = "repository";
   let root = cwd;
   let database = ".olympus/threads.sqlite";
@@ -73,6 +83,7 @@ function parseFlags(args: readonly string[], cwd: string): ParsedArguments {
       }
       index += 1;
       if (argument === "--model") model = value;
+      if (argument === "--openai-model") openAIModel = value;
       if (argument === "--tools") tools = value;
       if (argument === "--root") root = value;
       if (argument === "--db") database = value;
@@ -90,6 +101,7 @@ function parseFlags(args: readonly string[], cwd: string): ParsedArguments {
     json,
     ephemeral,
     model,
+    ...(openAIModel === undefined ? {} : { openAIModel }),
     tools,
     root,
     database,
@@ -129,6 +141,7 @@ export function parseCliCommand(args: readonly string[], cwd: string): CliComman
     kind: "run",
     objective,
     model: parsed.model,
+    ...(parsed.openAIModel === undefined ? {} : { openAIModel: parsed.openAIModel }),
     tools: parsed.tools,
     root: parsed.root,
     database: parsed.database,

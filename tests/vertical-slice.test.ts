@@ -43,7 +43,12 @@ describe("safe vertical slice", () => {
     expect(echo.result.answer).toBe("Echo: hello");
     expect(uppercase.result.answer).toBe("HELLO");
     expect(echo.eventTypes).toEqual(uppercase.eventTypes);
-    expect(echo.eventTypes).toEqual(["quest.started", "oracle.called", "quest.completed"]);
+    expect(echo.eventTypes).toEqual([
+      "quest.started",
+      "oracle.called",
+      "oracle.completed",
+      "quest.completed",
+    ]);
   });
 
   it("swaps tool implementations behind the host effect broker", async () => {

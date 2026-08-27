@@ -10,7 +10,7 @@ The v0 architecture proof currently provides:
 
 - typed capability registration and dependency resolution;
 - plugin setup rollback and reverse-order disposal;
-- replaceable model and tool-capability implementations;
+- replaceable model and tool-capability implementations, including OpenAI Responses;
 - a host-owned, default-deny effect broker;
 - confined read-only repository tools;
 - append-only, redacted in-memory and durable SQLite Thread events;
@@ -57,11 +57,19 @@ Use another database with `--db path/to/threads.sqlite`, or disable persistence 
 just run --model inspection --tools fake --json list
 ```
 
-Swap adapters without changing Athena:
+Swap deterministic adapters without changing Athena:
 
 ```bash
 just run --model echo --tools fake "hello olympus"
 just run --model uppercase --tools fake "hello olympus"
+```
+
+Use the real OpenAI Responses adapter by supplying the credential through the process environment, never through CLI arguments or committed configuration:
+
+```bash
+export OPENAI_API_KEY="..."
+export OPENAI_MODEL="gpt-5.6" # optional; --openai-model overrides it
+just run --model openai --tools repository "Summarize README.md"
 ```
 
 ## Project commands
