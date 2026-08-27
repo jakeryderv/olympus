@@ -19,7 +19,7 @@ The immediate priority is maintaining these contracts and preserving the fail-cl
 
 ## Next — operational depth
 
-- Implement transactional checkpoint-anchored compaction for durable Threads; the retention policy and read-only dry-run planner are implemented.
+- Implement transactional checkpoint-anchored compaction for durable Threads; the policy, dry-run planner, prepared anchors, suffix verification, and idempotency tombstones are implemented.
 - Design explicitly approved writable workspaces without weakening the read-only Docker mount.
 - Define the isolated third-party plugin wire protocol and process supervisor.
 - Improve CLI diagnostics, structured streaming output, and approval UX.

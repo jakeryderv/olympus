@@ -23,6 +23,39 @@ export const threadCheckpoints = sqliteTable(
   (table) => [primaryKey({ columns: [table.threadId, table.throughSequence] })],
 );
 
+export const threadRetentionAnchors = sqliteTable(
+  "thread_retention_anchors",
+  {
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => threadHeads.threadId),
+    throughSequence: integer("through_sequence").notNull(),
+    throughEventId: text("through_event_id").notNull(),
+    eventCount: integer("event_count").notNull(),
+    algorithm: text("algorithm").notNull(),
+    digest: text("digest").notNull(),
+    schemaVersion: integer("schema_version").notNull(),
+    checkpointCreatedAt: text("checkpoint_created_at").notNull(),
+    preparedAt: text("prepared_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.threadId, table.throughSequence] })],
+);
+
+export const threadIdempotencyTombstones = sqliteTable(
+  "thread_idempotency_tombstones",
+  {
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => threadHeads.threadId),
+    idempotencyKey: text("idempotency_key").notNull(),
+    contentHash: text("content_hash").notNull(),
+    eventId: text("event_id").notNull(),
+    sequence: integer("sequence").notNull(),
+    preparedAt: text("prepared_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.threadId, table.idempotencyKey] })],
+);
+
 export const threadEvents = sqliteTable(
   "thread_events",
   {
@@ -48,4 +81,10 @@ export const threadEvents = sqliteTable(
   ],
 );
 
-export const threadSchema = { threadCheckpoints, threadEvents, threadHeads };
+export const threadSchema = {
+  threadCheckpoints,
+  threadEvents,
+  threadHeads,
+  threadIdempotencyTombstones,
+  threadRetentionAnchors,
+};

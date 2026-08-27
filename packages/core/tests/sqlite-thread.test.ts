@@ -3,7 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import BetterSqlite3 from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
-import { SqliteThread } from "../src/index.js";
+import {
+  createThreadArtifact,
+  readProtectedThreadArtifact,
+  SqliteThread,
+  writeThreadArtifact,
+} from "../src/index.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -24,13 +29,13 @@ describe("SqliteThread", () => {
     const filename = await temporaryDatabase();
     const threadId = "00000000-0000-4000-8000-000000000010";
     const first = new SqliteThread({ filename, threadId });
-    expect(first.migrationVersion()).toBe(2);
+    expect(first.migrationVersion()).toBe(3);
     first.append({ type: "first", actor: "test", payload: { value: 1 } });
     first.append({ type: "second", actor: "test", payload: { value: 2 } });
     first.close();
 
     const reopened = new SqliteThread({ filename, threadId });
-    expect(reopened.migrationVersion()).toBe(2);
+    expect(reopened.migrationVersion()).toBe(3);
     expect(reopened.snapshot().map((event) => [event.sequence, event.type])).toEqual([
       [1, "first"],
       [2, "second"],
@@ -110,6 +115,60 @@ describe("SqliteThread", () => {
     const reopened = new SqliteThread({ filename, threadId });
     expect(reopened.latestCheckpoint()).toEqual(later);
     expect(reopened.verifyCheckpoint(later)).toBe(true);
+    reopened.close();
+  });
+
+  it("prepares monotonic retention anchors and tombstones without deleting events", async () => {
+    const filename = await temporaryDatabase();
+    const directory = join(filename, "..");
+    const threadId = "00000000-0000-4000-8000-000000000050";
+    const thread = new SqliteThread({ filename, threadId });
+    const firstAppend = {
+      type: "effect.authorized",
+      actor: "test",
+      idempotencyKey: "effect-1",
+      payload: { effect: "read" },
+    } as const;
+    thread.append(firstAppend);
+    const firstCheckpoint = thread.createCheckpoint();
+    const firstArtifactPath = join(directory, "first.json");
+    await writeThreadArtifact(
+      firstArtifactPath,
+      createThreadArtifact(thread.snapshot(), firstCheckpoint),
+    );
+
+    thread.append({ type: "effect.completed", actor: "test", payload: { ok: true } });
+    const protectedFirstArtifact = await readProtectedThreadArtifact(firstArtifactPath);
+    const firstAnchor = thread.prepareRetentionAnchor(protectedFirstArtifact);
+    expect(firstAnchor.throughSequence).toBe(1);
+    expect(thread.prepareRetentionAnchor(protectedFirstArtifact)).toEqual(firstAnchor);
+    expect(thread.snapshot()).toHaveLength(2);
+    expect(() => thread.append(firstAppend)).toThrow("cannot be replayed");
+    expect(() => thread.append({ ...firstAppend, payload: { effect: "different" } })).toThrow(
+      "reused with different content",
+    );
+
+    const secondCheckpoint = thread.createCheckpoint();
+    const secondArtifactPath = join(directory, "second.json");
+    await writeThreadArtifact(
+      secondArtifactPath,
+      createThreadArtifact(thread.snapshot(), secondCheckpoint),
+    );
+    thread.append({ type: "quest.completed", actor: "test", payload: {} });
+    const secondAnchor = thread.prepareRetentionAnchor(
+      await readProtectedThreadArtifact(secondArtifactPath),
+    );
+    expect(secondAnchor.throughSequence).toBe(2);
+    expect(thread.latestRetentionAnchor()).toEqual(secondAnchor);
+    expect(() => thread.prepareRetentionAnchor(protectedFirstArtifact)).toThrow(
+      "cannot move backward",
+    );
+    expect(thread.snapshot()).toHaveLength(3);
+    thread.close();
+
+    const reopened = new SqliteThread({ filename, threadId });
+    expect(reopened.latestRetentionAnchor()).toEqual(secondAnchor);
+    expect(reopened.append({ type: "later", actor: "test", payload: {} }).sequence).toBe(4);
     reopened.close();
   });
 
