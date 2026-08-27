@@ -1,5 +1,11 @@
 # @olympus/core
 
+## 0.1.1
+
+### Patch Changes
+
+- 6838fe8: Add immutable Thread checkpoints, offline-verifiable protected artifacts, and CLI commands for checkpointing, verification, and export.
+
 ## 0.1.0
 
 ### Minor Changes

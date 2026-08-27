@@ -1,5 +1,20 @@
 # @olympus/cli
 
+## 0.1.1
+
+### Patch Changes
+
+- 463a77e: Organize replaceable implementations under capability-based plugin directories and move shared Oracle, ToolCatalog, and AgentRunner APIs into the neutral `@olympus/contracts` package.
+- 6838fe8: Add immutable Thread checkpoints, offline-verifiable protected artifacts, and CLI commands for checkpointing, verification, and export.
+- Updated dependencies [463a77e]
+- Updated dependencies [6838fe8]
+  - @olympus/athena@0.1.1
+  - @olympus/docker@0.1.1
+  - @olympus/openai@0.1.1
+  - @olympus/reference@0.1.1
+  - @olympus/core@0.1.1
+  - @olympus/contracts@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes

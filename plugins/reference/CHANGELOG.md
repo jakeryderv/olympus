@@ -1,5 +1,14 @@
 # @olympus/reference
 
+## 0.1.1
+
+### Patch Changes
+
+- 463a77e: Organize replaceable implementations under capability-based plugin directories and move shared Oracle, ToolCatalog, and AgentRunner APIs into the neutral `@olympus/contracts` package.
+- Updated dependencies [6838fe8]
+  - @olympus/core@0.1.1
+  - @olympus/contracts@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes
