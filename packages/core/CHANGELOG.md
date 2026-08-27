@@ -1,5 +1,11 @@
 # @olympus/core
 
+## 0.1.3
+
+### Patch Changes
+
+- 0d4077d: Add non-destructive prepared Thread retention anchors, anchor-aware checkpoint verification, and durable idempotency tombstones.
+
 ## 0.1.2
 
 ### Patch Changes

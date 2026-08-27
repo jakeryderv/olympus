@@ -1,5 +1,17 @@
 # @olympus/cli
 
+## 0.1.3
+
+### Patch Changes
+
+- Updated dependencies [0d4077d]
+  - @olympus/core@0.1.3
+  - @olympus/contracts@0.1.3
+  - @olympus/athena@0.1.3
+  - @olympus/openai@0.1.3
+  - @olympus/reference@0.1.3
+  - @olympus/docker@0.1.3
+
 ## 0.1.2
 
 ### Patch Changes
