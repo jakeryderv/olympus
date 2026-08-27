@@ -1,5 +1,11 @@
 # @olympus/core
 
+## 0.1.2
+
+### Patch Changes
+
+- 81e5e86: Add fail-closed checkpoint-anchored Thread retention planning with protected-artifact verification and a non-mutating CLI dry-run.
+
 ## 0.1.1
 
 ### Patch Changes
