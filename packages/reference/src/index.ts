@@ -23,32 +23,37 @@ class ReferenceOracle implements Oracle {
   }
 
   async generate(request: OracleRequest): Promise<OracleResponse> {
+    const metadata = { provider: "reference", model: this.#variant } as const;
     if (request.toolResult !== undefined) {
       return {
         message: `Tool result (${request.toolResult.name}): ${JSON.stringify(request.toolResult.output)}`,
+        metadata,
       };
     }
     if (this.#variant === "echo") {
-      return { message: `Echo: ${request.objective}` };
+      return { message: `Echo: ${request.objective}`, metadata };
     }
     if (this.#variant === "uppercase") {
-      return { message: request.objective.toUpperCase() };
+      return { message: request.objective.toUpperCase(), metadata };
     }
     const readMatch = /^read\s+(.+)$/i.exec(request.objective.trim());
     if (readMatch?.[1] !== undefined) {
       return {
         message: "Inspecting a file.",
         toolCall: { name: "read_file", input: { path: readMatch[1] } },
+        metadata,
       };
     }
     if (/^list(?:\s+files)?$/i.test(request.objective.trim())) {
       return {
         message: "Listing repository files.",
         toolCall: { name: "list_files", input: { path: "." } },
+        metadata,
       };
     }
     return {
       message: "The deterministic inspection model supports `list` and `read <path>`.",
+      metadata,
     };
   }
 }
@@ -67,11 +72,23 @@ interface PathInput {
   readonly path: string;
 }
 
+const pathInputSchema = {
+  type: "object",
+  properties: { path: { type: "string" } },
+  required: ["path"],
+  additionalProperties: false,
+} as const;
+
 const definitions: readonly ToolDefinition[] = [
-  { name: "list_files", description: "List entries inside the configured repository root." },
+  {
+    name: "list_files",
+    description: "List entries inside the configured repository root.",
+    inputSchema: pathInputSchema,
+  },
   {
     name: "read_file",
     description: "Read a UTF-8 text file inside the configured repository root.",
+    inputSchema: pathInputSchema,
   },
 ];
 

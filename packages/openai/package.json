@@ -1,26 +1,26 @@
 {
-  "name": "@olympus/cli",
+  "name": "@olympus/openai",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "bin": {
-    "olympus": "./dist/index.js"
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist coverage",
-    "dev": "tsx src/index.ts",
-    "start": "node dist/index.js",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@olympus/athena": "workspace:*",
     "@olympus/core": "workspace:*",
-    "@olympus/openai": "workspace:*",
-    "@olympus/reference": "workspace:*"
-  },
-  "devDependencies": {
-    "@types/node": "^26.3.0"
+    "openai": "^7.5.0"
   }
 }

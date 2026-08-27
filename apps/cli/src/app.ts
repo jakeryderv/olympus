@@ -1,13 +1,17 @@
 import { resolve } from "node:path";
 import { AGENT_RUNNER, createAthenaPlugin } from "@olympus/athena";
+import { createOpenAIPlugin } from "@olympus/openai";
 import {
+  CREDENTIAL_BROKER,
   EFFECT_BROKER,
+  EnvironmentCredentialBroker,
   HostEffectBroker,
   InMemoryThread,
   Olympus,
   ReadOnlyPolicy,
   SqliteThread,
   hostService,
+  type OlympusPlugin,
   type ThreadEvent,
 } from "@olympus/core";
 import {
@@ -20,6 +24,7 @@ import { type CliCommand, parseCliCommand } from "./arguments.js";
 
 export interface CliIo {
   readonly cwd: string;
+  readonly environment: Readonly<Record<string, string | undefined>>;
   writeStdout(text: string): void;
   writeStderr(text: string): void;
 }
@@ -34,7 +39,8 @@ Usage:
   olympus thread replay <thread-id> [--db path] [--json]
 
 Run options:
-  --model inspection|echo|uppercase
+  --model inspection|echo|uppercase|openai
+  --openai-model model-id (or OPENAI_MODEL)
   --tools repository|fake
   --root path
   --db path
@@ -43,12 +49,24 @@ Run options:
   --json
 `;
 
-function isModelVariant(value: string): value is ModelVariant {
+function isReferenceModel(value: string): value is ModelVariant {
   return ["echo", "inspection", "uppercase"].includes(value);
 }
 
 function isToolVariant(value: string): value is ToolVariant {
   return ["fake", "repository"].includes(value);
+}
+
+function oraclePlugin(command: Extract<CliCommand, { kind: "run" }>, io: CliIo): OlympusPlugin {
+  if (command.model === "openai") {
+    return createOpenAIPlugin({
+      model: command.openAIModel ?? io.environment.OPENAI_MODEL ?? "gpt-5.6",
+    });
+  }
+  if (!isReferenceModel(command.model)) {
+    throw new Error(`Unknown model variant: ${command.model}`);
+  }
+  return createModelPlugin(command.model);
 }
 
 function databasePath(cwd: string, filename: string): string {
@@ -128,9 +146,6 @@ function inspectThreads(
 }
 
 async function runQuest(command: Extract<CliCommand, { kind: "run" }>, io: CliIo): Promise<void> {
-  if (!isModelVariant(command.model)) {
-    throw new Error(`Unknown model variant: ${command.model}`);
-  }
   if (!isToolVariant(command.tools)) {
     throw new Error(`Unknown tool variant: ${command.tools}`);
   }
@@ -143,16 +158,17 @@ async function runQuest(command: Extract<CliCommand, { kind: "run" }>, io: CliIo
       });
   const thread = persistentThread ?? new InMemoryThread(command.threadId);
   const broker = new HostEffectBroker(new ReadOnlyPolicy(), thread);
+  const credentials = new EnvironmentCredentialBroker(io.environment);
   const olympus = new Olympus({
     audit: thread,
-    hostServices: [hostService(EFFECT_BROKER, broker)],
+    hostServices: [hostService(EFFECT_BROKER, broker), hostService(CREDENTIAL_BROKER, credentials)],
   });
 
   try {
     await olympus.compose([
       createAthenaPlugin(),
       createToolPlugin(command.tools, command.root),
-      createModelPlugin(command.model),
+      oraclePlugin(command, io),
     ]);
     const result = await olympus.use(AGENT_RUNNER).run(command.objective);
     if (command.json) {
@@ -178,6 +194,19 @@ async function runQuest(command: Extract<CliCommand, { kind: "run" }>, io: CliIo
   }
 }
 
+function publicErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return "Unknown failure";
+  }
+  if (
+    error.cause instanceof Error &&
+    error.cause.message.startsWith("Required credential is unavailable:")
+  ) {
+    return error.cause.message;
+  }
+  return error.message;
+}
+
 export async function main(args: readonly string[], io: CliIo): Promise<number> {
   try {
     const command = parseCliCommand(args, io.cwd);
@@ -192,7 +221,7 @@ export async function main(args: readonly string[], io: CliIo): Promise<number> 
     await runQuest(command, io);
     return 0;
   } catch (error) {
-    io.writeStderr(`Error: ${error instanceof Error ? error.message : "Unknown failure"}\n`);
+    io.writeStderr(`Error: ${publicErrorMessage(error)}\n`);
     return 1;
   }
 }

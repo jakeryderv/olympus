@@ -31,7 +31,7 @@ The host kernel owns mechanisms that plugins must not bypass:
 - dependency resolution;
 - setup, rollback, cancellation, and disposal;
 - the effect invocation path and final authorization decision;
-- approval-token validation and secret release when those features arrive;
+- credential release through the host-owned broker and future approval-token validation;
 - authoritative authorization and effect-audit events.
 
 Replaceable plugins may provide policy evaluation, model adapters, tool implementations, orchestration, storage, sandbox backends, interfaces, and observability consumers. A host-owned broker invokes those implementations.
@@ -44,6 +44,7 @@ CLI
      ├─ typed capability registry
      ├─ dependency/lifecycle engine
      ├─ host effect broker ── read-only policy
+     ├─ host credential broker
      └─ append-only Thread
          └─ Pantheon
              ├─ Athena agent runner
@@ -58,12 +59,15 @@ The implementation is split only where a contract is exercised:
 packages/core       host kernel, lifecycle, effect broker, Thread
 packages/athena     default orchestration capability
 packages/reference  deterministic model and read-tool adapters
+packages/openai     OpenAI Responses adapter
 apps/cli            composition root and user interface
 tests               cross-package architecture proof
 evals               behavioral regression cases
 ```
 
 New mythological packages are added only after a boundary has an independently testable contract or release reason.
+
+Oracle responses normalize text, function calls, opaque continuation, usage, request identity, streaming deltas, cancellation, and errors without exposing provider SDK types. The OpenAI adapter requests `OPENAI_API_KEY` from the host credential broker, uses `store: false`, and keeps function-call continuation state local. Deterministic fake transports cover the provider contract in CI. See [ADR 0006](adr/0006-credentials-and-model-provider-boundary.md).
 
 ## Capability and lifecycle contract
 

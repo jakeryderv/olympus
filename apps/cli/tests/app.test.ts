@@ -16,6 +16,7 @@ async function testContext() {
   const stderr: string[] = [];
   const io: CliIo = {
     cwd,
+    environment: {},
     writeStdout: (text) => stdout.push(text),
     writeStderr: (text) => stderr.push(text),
   };
@@ -44,14 +45,14 @@ describe("Olympus CLI", () => {
 
     context.stdout.length = 0;
     expect(await main(["thread", "list", "--db", database], context.io)).toBe(0);
-    expect(context.stdout.join("")).toContain(`${threadId}\t3 events`);
+    expect(context.stdout.join("")).toContain(`${threadId}\t4 events`);
 
     context.stdout.length = 0;
     expect(await main(["thread", "list", "--db", database, "--json"], context.io)).toBe(0);
     const output = JSON.parse(context.stdout.join("")) as {
       threads: { id: string; eventCount: number }[];
     };
-    expect(output.threads).toEqual([expect.objectContaining({ id: threadId, eventCount: 3 })]);
+    expect(output.threads).toEqual([expect.objectContaining({ id: threadId, eventCount: 4 })]);
     expect(context.stderr).toEqual([]);
   });
 
@@ -80,6 +81,17 @@ describe("Olympus CLI", () => {
     const reopened = new SqliteThread({ filename: database, threadId });
     expect(reopened.snapshot()).toHaveLength(1);
     reopened.close();
+  });
+
+  it("fails closed when the OpenAI credential is unavailable", async () => {
+    const context = await testContext();
+    expect(
+      await main(
+        ["run", "--model", "openai", "--tools", "fake", "--ephemeral", "hello"],
+        context.io,
+      ),
+    ).toBe(1);
+    expect(context.stderr.join("")).toContain("Required credential is unavailable: OPENAI_API_KEY");
   });
 
   it("fails cleanly for an unknown Thread", async () => {
