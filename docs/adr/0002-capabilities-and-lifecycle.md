@@ -9,7 +9,7 @@ The initial sketch did not define capability identity, multiplicity, dependency 
 
 ## Decision
 
-V0 uses process-local typed capability keys and exactly one provider per key. Plugins declare requirements and provisions before setup. Olympus rejects missing or duplicate providers and dependency cycles before activation.
+V0 uses process-local typed capability keys and exactly one provider per key. Plugins declare requirements and provisions before setup. Validated manifests duplicate those names as portable metadata; admission rejects any mismatch before dependency resolution. Olympus rejects missing or duplicate providers and dependency cycles before activation.
 
 Setup follows dependency order. A failed composition disposes resources from that attempt in reverse order, continues cleanup after teardown errors, and preserves the setup failure as the root cause. Normal shutdown disposes each registered resource at most once in reverse order.
 
@@ -21,4 +21,4 @@ Setup follows dependency order. A failed composition disposes resources from tha
 
 ## Consequences
 
-Plugin boundaries are deterministic and testable. Capability version negotiation, scoped registries, dynamic unloading, and concurrent composition remain unsupported.
+Plugin boundaries are deterministic and testable. Whole-host shutdown remains the only unloading operation; hot or dynamic unloading is not promised. Capability version negotiation, scoped registries, and concurrent composition remain unsupported. Manifest and trust details are specified by [ADR 0007](0007-validated-plugin-manifests.md).

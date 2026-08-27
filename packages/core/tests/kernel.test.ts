@@ -3,18 +3,41 @@ import {
   DependencyCycleError,
   DuplicateCapabilityError,
   MissingCapabilityError,
+  PLUGIN_MANIFEST_API_VERSION,
   PluginSetupError,
   serviceKey,
   type OlympusPlugin,
+  type PluginManifest,
+  type ServiceKey,
 } from "../src/index.js";
 import { Olympus } from "../src/olympus.js";
 
 const A = serviceKey<string>("test.a");
 const B = serviceKey<string>("test.b");
 
+function manifest(
+  id: string,
+  requires: readonly ServiceKey<unknown>[] = [],
+  provides: readonly ServiceKey<unknown>[] = [],
+): PluginManifest {
+  return {
+    apiVersion: PLUGIN_MANIFEST_API_VERSION,
+    id,
+    version: "1.0.0",
+    trust: { mode: "trusted-in-process" },
+    capabilities: {
+      requires: requires.map((key) => key.name),
+      provides: provides.map((key) => key.name),
+    },
+    configuration: { schema: { type: "object", additionalProperties: false } },
+  };
+}
+
 function provider(name: string, value: string): OlympusPlugin {
   return {
     name,
+    manifest: manifest(name, [], [A]),
+    config: {},
     provides: [A],
     setup(context) {
       context.provide(A, value);
@@ -26,6 +49,8 @@ describe("Olympus composition", () => {
   it("rejects missing and duplicate providers before setup", async () => {
     const missing: OlympusPlugin = {
       name: "missing",
+      manifest: manifest("missing", [A]),
+      config: {},
       requires: [A],
       setup() {},
     };
@@ -38,6 +63,8 @@ describe("Olympus composition", () => {
   it("rejects dependency cycles before setup", async () => {
     const left: OlympusPlugin = {
       name: "left",
+      manifest: manifest("left", [B], [A]),
+      config: {},
       requires: [B],
       provides: [A],
       setup(context) {
@@ -46,6 +73,8 @@ describe("Olympus composition", () => {
     };
     const right: OlympusPlugin = {
       name: "right",
+      manifest: manifest("right", [A], [B]),
+      config: {},
       requires: [A],
       provides: [B],
       setup(context) {
@@ -60,6 +89,8 @@ describe("Olympus composition", () => {
     const rootCause = new Error("fault injection");
     const first: OlympusPlugin = {
       name: "first",
+      manifest: manifest("first", [], [A]),
+      config: {},
       provides: [A],
       setup(context) {
         context.provide(A, "active");
@@ -72,6 +103,8 @@ describe("Olympus composition", () => {
     };
     const failing: OlympusPlugin = {
       name: "failing",
+      manifest: manifest("failing", [A], [B]),
+      config: {},
       requires: [A],
       provides: [B],
       setup(context) {

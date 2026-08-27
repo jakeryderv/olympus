@@ -8,7 +8,7 @@ Olympus is an experimental TypeScript harness that keeps agent behavior replacea
 
 The v0 architecture proof currently provides:
 
-- typed capability registration and dependency resolution;
+- validated plugin manifests, explicit trust modes, and typed capability resolution;
 - plugin setup rollback and reverse-order disposal;
 - replaceable model and tool-capability implementations, including OpenAI Responses;
 - a host-owned, default-deny effect broker;
