@@ -13,7 +13,7 @@ The v0 architecture proof currently provides:
 - replaceable model and tool-capability implementations;
 - a host-owned, default-deny effect broker;
 - confined read-only repository tools;
-- append-only, redacted in-memory Thread events;
+- append-only, redacted in-memory and durable SQLite Thread events;
 - a minimal Athena orchestration loop and CLI;
 - conventional tests and behavioral regression evals.
 

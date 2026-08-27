@@ -99,7 +99,9 @@ A Thread is an append-only event record for inspection and audit. V0 guarantees:
 - redaction of obvious credential fields;
 - explicit effect request, decision, attempt, and outcome events.
 
-In v0, **replay** means reducing or rendering recorded events. It does not re-call models or repeat effects. **Rewind** will mean branching from an immutable checkpoint, never deleting history. Deterministic re-execution, durable storage, compaction, and branch execution are future contracts.
+In v0, **replay** means reducing or rendering recorded events. It does not re-call models or repeat effects. **Rewind** will mean branching from an immutable checkpoint, never deleting history. Deterministic re-execution, compaction, and branch execution are future contracts.
+
+Threads can remain in memory for disposable sessions or use the durable SQLite implementation. SQLite appends allocate the sequence and write the event in one transaction, apply versioned migrations, redact payloads before persistence, and support fail-closed idempotency keys. See [ADR 0005](adr/0005-durable-sqlite-threads.md).
 
 ## Architecture proof
 
@@ -109,6 +111,7 @@ The vertical slice must continue to prove that:
 2. two implementations of the tool capability swap behind the host broker;
 3. normalized semantic event types remain stable across swaps;
 4. setup fault injection leaves no capability or handler active;
-5. later clean activation and shutdown remain safe.
+5. later clean activation and shutdown remain safe;
+6. durable Thread events survive reopen without sequence gaps after a failed append.
 
 See [the ADRs](adr/) for decisions and [the roadmap](roadmap.md) for planned work.
