@@ -17,7 +17,7 @@ The v0 architecture proof currently provides:
 - a minimal Athena orchestration loop and CLI;
 - conventional tests and behavioral regression evals.
 
-Shell commands, file writes, network effects, third-party plugin isolation, deterministic replay, and hot unloading are deliberately out of scope.
+Direct host shell commands, file writes, model-requested network effects, third-party plugin isolation, deterministic replay, and hot unloading are deliberately out of scope. Privileged argv execution is available only through the guarded Docker tool.
 
 ## Requirements
 
@@ -70,6 +70,14 @@ Use the real OpenAI Responses adapter by supplying the credential through the pr
 export OPENAI_API_KEY="..."
 export OPENAI_MODEL="gpt-5.6" # optional; --openai-model overrides it
 just run --model openai --tools repository "Summarize README.md"
+```
+
+Run one explicitly approved command through the Docker-only shell tool. The image must already exist locally and be pinned by digest; the repository is mounted read-only and networking is disabled:
+
+```bash
+just run --model openai --tools docker --allow-shell \
+  --docker-image 'example/image@sha256:<64-hex-digest>' \
+  "Run the project tests"
 ```
 
 ## Project commands

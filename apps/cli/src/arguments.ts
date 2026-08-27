@@ -4,6 +4,8 @@ export type CliCommand =
       readonly objective: string;
       readonly model: string;
       readonly openAIModel?: string;
+      readonly dockerImage?: string;
+      readonly allowShell: boolean;
       readonly tools: string;
       readonly root: string;
       readonly database: string;
@@ -31,6 +33,8 @@ interface ParsedArguments {
   readonly ephemeral: boolean;
   readonly model: string;
   readonly openAIModel?: string;
+  readonly dockerImage?: string;
+  readonly allowShell: boolean;
   readonly tools: string;
   readonly root: string;
   readonly database: string;
@@ -41,6 +45,7 @@ interface ParsedArguments {
 const valueOptions = new Set([
   "--model",
   "--openai-model",
+  "--docker-image",
   "--tools",
   "--root",
   "--db",
@@ -51,9 +56,11 @@ function parseFlags(args: readonly string[], cwd: string): ParsedArguments {
   const positionals: string[] = [];
   let json = false;
   let ephemeral = false;
+  let allowShell = false;
   let help = false;
   let model = "inspection";
   let openAIModel: string | undefined;
+  let dockerImage: string | undefined;
   let tools = "repository";
   let root = cwd;
   let database = ".olympus/threads.sqlite";
@@ -72,6 +79,10 @@ function parseFlags(args: readonly string[], cwd: string): ParsedArguments {
       ephemeral = true;
       continue;
     }
+    if (argument === "--allow-shell") {
+      allowShell = true;
+      continue;
+    }
     if (argument === "--help" || argument === "-h") {
       help = true;
       continue;
@@ -84,6 +95,7 @@ function parseFlags(args: readonly string[], cwd: string): ParsedArguments {
       index += 1;
       if (argument === "--model") model = value;
       if (argument === "--openai-model") openAIModel = value;
+      if (argument === "--docker-image") dockerImage = value;
       if (argument === "--tools") tools = value;
       if (argument === "--root") root = value;
       if (argument === "--db") database = value;
@@ -102,6 +114,8 @@ function parseFlags(args: readonly string[], cwd: string): ParsedArguments {
     ephemeral,
     model,
     ...(openAIModel === undefined ? {} : { openAIModel }),
+    ...(dockerImage === undefined ? {} : { dockerImage }),
+    allowShell,
     tools,
     root,
     database,
@@ -142,6 +156,8 @@ export function parseCliCommand(args: readonly string[], cwd: string): CliComman
     objective,
     model: parsed.model,
     ...(parsed.openAIModel === undefined ? {} : { openAIModel: parsed.openAIModel }),
+    ...(parsed.dockerImage === undefined ? {} : { dockerImage: parsed.dockerImage }),
+    allowShell: parsed.allowShell,
     tools: parsed.tools,
     root: parsed.root,
     database: parsed.database,

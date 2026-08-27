@@ -92,7 +92,12 @@ export interface Oracle {
 
 export interface ToolCatalog {
   definitions(): readonly ToolDefinition[];
-  invoke(call: ToolCall, actor: string, correlationId: string): Promise<unknown>;
+  invoke(
+    call: ToolCall,
+    actor: string,
+    correlationId: string,
+    signal?: AbortSignal,
+  ): Promise<unknown>;
 }
 
 export interface QuestOptions {
@@ -159,7 +164,7 @@ class AthenaRunner implements AgentRunner {
           correlationId,
           tool: toolCall.name,
         });
-        const output = await this.#tools.invoke(toolCall, "athena", correlationId);
+        const output = await this.#tools.invoke(toolCall, "athena", correlationId, options.signal);
         ensureNotCancelled(options.signal);
         await this.#context.emit("oracle.called", { correlationId, afterTool: true });
         response = await this.#oracle.generate({

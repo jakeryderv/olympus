@@ -50,6 +50,9 @@ importers:
       '@olympus/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@olympus/docker':
+        specifier: workspace:*
+        version: link:../../packages/docker
       '@olympus/openai':
         specifier: workspace:*
         version: link:../../packages/openai
@@ -82,6 +85,15 @@ importers:
       '@types/better-sqlite3':
         specifier: ^9.6.0
         version: 9.6.0
+
+  packages/docker:
+    dependencies:
+      '@olympus/athena':
+        specifier: workspace:*
+        version: link:../athena
+      '@olympus/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/openai:
     dependencies:

@@ -62,6 +62,7 @@ packages/core       host kernel, lifecycle, effect broker, Thread
 packages/athena     default orchestration capability
 packages/reference  deterministic model and read-tool adapters
 packages/openai     OpenAI Responses adapter
+packages/docker     Docker-isolated privileged subprocess tool
 apps/cli            composition root and user interface
 tests               cross-package architecture proof
 evals               behavioral regression cases
@@ -94,9 +95,9 @@ Dynamic unloading, hot replacement, version negotiation, multiple-provider selec
 
 A tool implementation registers an effect handler with the host broker. Athena can invoke tools only through the ToolCatalog and broker. The host records request, authorization, start, and outcome events.
 
-V0 supports repository-confined listing and UTF-8 file reads capped at 64 KiB. It does not support shell commands, writes, network calls, credentials, or destructive actions.
+V0 supports repository-confined listing and UTF-8 file reads capped at 64 KiB. Direct host shell commands, writes, model-requested network calls, and destructive actions remain disabled.
 
-A future guarded-shell slice must add explicit per-invocation approval, a sanitized environment and working directory, timeout and cancellation, bounded output, process isolation, and durable audit records before execution is enabled.
+The optional shell tool requires an explicit host-issued, effect-and-actor-scoped, expiring, single-use approval. It executes argv only through Docker with a digest-pinned local image, no network, a read-only workspace mount, an unprivileged user, bounded resources/output/time, and cancellation cleanup. Authorization is committed before execution and an outcome afterward; Docker unavailability fails setup closed. See [ADR 0008](adr/0008-docker-isolated-subprocess-effects.md).
 
 ## Thread semantics
 
