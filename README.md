@@ -43,7 +43,15 @@ just run --model inspection --tools repository list
 just run --model inspection --tools repository "read README.md"
 ```
 
-Inspect the complete event Thread:
+Runs persist their audit Thread to `.olympus/threads.sqlite` by default and print the Thread ID. Inspect or render it without re-executing models or effects:
+
+```bash
+just run thread list
+just run thread show <thread-id>
+just run thread replay <thread-id> --json
+```
+
+Use another database with `--db path/to/threads.sqlite`, or disable persistence for a disposable run with `--ephemeral`. JSON run output includes the complete event Thread:
 
 ```bash
 just run --model inspection --tools fake --json list

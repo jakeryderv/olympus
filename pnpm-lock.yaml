@@ -53,6 +53,10 @@ importers:
       '@olympus/reference':
         specifier: workspace:*
         version: link:../../packages/reference
+    devDependencies:
+      '@types/node':
+        specifier: ^26.3.0
+        version: 26.3.0
 
   packages/athena:
     dependencies:
