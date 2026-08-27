@@ -2,6 +2,8 @@ node_modules/
 dist/
 coverage/
 .turbo/
+.pi/
+.olympus/
 *.tsbuildinfo
 *.log
 .env

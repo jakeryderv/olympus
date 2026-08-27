@@ -18,5 +18,8 @@
     "@olympus/athena": "workspace:*",
     "@olympus/core": "workspace:*",
     "@olympus/reference": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.3.0"
   }
 }

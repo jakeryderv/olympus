@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import BetterSqlite3 from "better-sqlite3";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq } from "drizzle-orm";
 import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { threadEvents, threadHeads, threadSchema } from "./thread-schema.js";
 import {
@@ -52,6 +52,12 @@ const migrations = [
 export interface SqliteThreadOptions {
   readonly filename: string;
   readonly threadId?: string;
+}
+
+export interface ThreadSummary {
+  readonly id: string;
+  readonly createdAt: string;
+  readonly eventCount: number;
 }
 
 type ThreadEventRow = typeof threadEvents.$inferSelect;
@@ -193,14 +199,34 @@ export class SqliteThread implements AuditThread {
   }
 
   snapshot(): readonly ThreadEvent[] {
+    return this.readThread(this.id);
+  }
+
+  readThread(threadId: string): readonly ThreadEvent[] {
     this.#assertOpen();
     return this.#db
       .select()
       .from(threadEvents)
-      .where(eq(threadEvents.threadId, this.id))
+      .where(eq(threadEvents.threadId, threadId))
       .orderBy(asc(threadEvents.sequence))
       .all()
       .map(rowToEvent);
+  }
+
+  listThreads(): readonly ThreadSummary[] {
+    this.#assertOpen();
+    return this.#db
+      .select({
+        id: threadHeads.threadId,
+        createdAt: threadHeads.createdAt,
+        eventCount: count(threadEvents.eventId),
+      })
+      .from(threadHeads)
+      .leftJoin(threadEvents, eq(threadHeads.threadId, threadEvents.threadId))
+      .groupBy(threadHeads.threadId, threadHeads.createdAt)
+      .orderBy(desc(threadHeads.createdAt))
+      .all()
+      .map((row) => ({ ...row, eventCount: Number(row.eventCount) }));
   }
 
   migrationVersion(): number {

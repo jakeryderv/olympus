@@ -101,7 +101,7 @@ A Thread is an append-only event record for inspection and audit. V0 guarantees:
 
 In v0, **replay** means reducing or rendering recorded events. It does not re-call models or repeat effects. **Rewind** will mean branching from an immutable checkpoint, never deleting history. Deterministic re-execution, compaction, and branch execution are future contracts.
 
-Threads can remain in memory for disposable sessions or use the durable SQLite implementation. SQLite appends allocate the sequence and write the event in one transaction, apply versioned migrations, redact payloads before persistence, and support fail-closed idempotency keys. See [ADR 0005](adr/0005-durable-sqlite-threads.md).
+Threads can remain in memory for disposable sessions or use the durable SQLite implementation. SQLite appends allocate the sequence and write the event in one transaction, apply versioned migrations, redact payloads before persistence, and support fail-closed idempotency keys. The CLI persists runs by default and exposes list, inspection, and render-only replay commands; none of those read paths invoke Athena, models, tools, or effects. See [ADR 0005](adr/0005-durable-sqlite-threads.md).
 
 ## Architecture proof
 
