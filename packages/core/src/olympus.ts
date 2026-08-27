@@ -5,6 +5,7 @@ import {
   PluginSetupError,
 } from "./errors.js";
 import type { EventHandler, OlympusContext, OlympusEvent, OlympusPlugin } from "./plugin.js";
+import { validatePluginSet } from "./manifest.js";
 import type { Disposable, HostService, ServiceKey } from "./services.js";
 import { InMemoryThread, type AuditSink } from "./thread.js";
 
@@ -107,6 +108,7 @@ export class Olympus {
     this.#composing = true;
     const baseline = this.#active.length;
     try {
+      validatePluginSet([...this.#active.map((record) => record.plugin), ...plugins]);
       const ordered = this.#resolveOrder(plugins);
       for (const plugin of ordered) {
         await this.#activate(plugin, baseline);
@@ -137,10 +139,11 @@ export class Olympus {
     const names = new Set<string>();
     const providers = new Map<symbol, OlympusPlugin>();
     for (const plugin of plugins) {
-      if (names.has(plugin.name)) {
-        throw new Error(`Plugin name is duplicated: ${plugin.name}`);
+      const pluginId = plugin.manifest.id;
+      if (names.has(pluginId)) {
+        throw new Error(`Plugin name is duplicated: ${pluginId}`);
       }
-      names.add(plugin.name);
+      names.add(pluginId);
       for (const key of plugin.provides ?? []) {
         if (this.#services.has(key.id) || providers.has(key.id)) {
           throw new DuplicateCapabilityError(key.name);
@@ -188,7 +191,7 @@ export class Olympus {
           [...(dependencies.get(plugin) ?? [])].every((item) => !remaining.has(item)),
       );
       if (ready.length === 0) {
-        throw new DependencyCycleError([...remaining].map((plugin) => plugin.name));
+        throw new DependencyCycleError([...remaining].map((plugin) => plugin.manifest.id));
       }
       for (const plugin of ready) {
         remaining.delete(plugin);
@@ -200,13 +203,14 @@ export class Olympus {
 
   async #activate(plugin: OlympusPlugin, baseline: number): Promise<void> {
     const disposables: Disposable[] = [];
-    const context = this.#contextFor(plugin.name, disposables);
+    const pluginId = plugin.manifest.id;
+    const context = this.#contextFor(pluginId, disposables);
     try {
       await plugin.setup(context);
       for (const key of plugin.provides ?? []) {
         const entry = this.#services.get(key.id);
-        if (entry?.owner !== plugin.name) {
-          throw new MissingCapabilityError(`${key.name} (declared by ${plugin.name})`);
+        if (entry?.owner !== pluginId) {
+          throw new MissingCapabilityError(`${key.name} (declared by ${pluginId})`);
         }
       }
       this.#active.push({ plugin, disposables });
@@ -216,7 +220,7 @@ export class Olympus {
       for (const record of newlyActive) {
         cleanupErrors.push(...(await this.#disposeAll(record.disposables)));
       }
-      throw new PluginSetupError(plugin.name, cause, cleanupErrors);
+      throw new PluginSetupError(pluginId, cause, cleanupErrors);
     }
   }
 

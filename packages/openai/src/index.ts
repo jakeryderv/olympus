@@ -8,17 +8,16 @@ import {
   BadRequestError,
   RateLimitError,
 } from "openai";
-import type {
-  JsonSchema,
-  Oracle,
-  OracleRequest,
-  OracleResponse,
-  OracleStreamEvent,
-  ToolCall,
+import * as AthenaModule from "@olympus/athena";
+import {
+  ORACLE,
+  type Oracle,
+  type OracleRequest,
+  type OracleResponse,
+  type ToolCall,
 } from "@olympus/athena";
-import { ORACLE, OracleError } from "@olympus/athena";
-import type { OlympusPlugin } from "@olympus/core";
-import { CREDENTIAL_BROKER } from "@olympus/core";
+import * as CoreModule from "@olympus/core";
+import type { OlympusContext, OlympusPlugin, ServiceKey } from "@olympus/core";
 import {
   type OpenAIFunctionCall,
   type OpenAIFunctionTool,
@@ -30,6 +29,90 @@ import {
 } from "./transport.js";
 
 export * from "./transport.js";
+
+type JsonSchema = Readonly<Record<string, unknown>>;
+
+interface AdapterToolDefinition {
+  readonly name: string;
+  readonly description: string;
+  readonly inputSchema?: JsonSchema;
+}
+
+interface AdapterToolResult {
+  readonly callId?: string;
+  readonly name: string;
+  readonly output: unknown;
+}
+
+interface AdapterOracleRequest extends Omit<OracleRequest, "toolResult" | "tools"> {
+  readonly tools: readonly AdapterToolDefinition[];
+  readonly toolResult?: AdapterToolResult;
+  readonly continuation?: string;
+  readonly signal?: AbortSignal;
+}
+
+interface AdapterToolCall extends ToolCall {
+  readonly id?: string;
+}
+
+interface AdapterOracleResponse extends OracleResponse {
+  readonly toolCall?: AdapterToolCall;
+  readonly continuation?: string;
+  readonly metadata?: {
+    readonly provider: string;
+    readonly model: string;
+    readonly requestId?: string;
+    readonly usage?: {
+      readonly inputTokens: number;
+      readonly outputTokens: number;
+      readonly totalTokens: number;
+    };
+  };
+}
+
+type AdapterOracleStreamEvent =
+  | { readonly type: "text.delta"; readonly delta: string }
+  | { readonly type: "tool.call"; readonly call: AdapterToolCall }
+  | { readonly type: "completed"; readonly response: AdapterOracleResponse };
+
+type AdapterOracleErrorCode =
+  | "authentication"
+  | "cancelled"
+  | "invalid_request"
+  | "rate_limited"
+  | "server_error"
+  | "unavailable"
+  | "unknown";
+
+interface AdapterOracleError extends Error {
+  readonly code: AdapterOracleErrorCode;
+  readonly retryable: boolean;
+  readonly provider: string;
+}
+
+interface OracleErrorConstructor {
+  new (
+    message: string,
+    options: {
+      readonly code: AdapterOracleErrorCode;
+      readonly retryable: boolean;
+      readonly provider: string;
+      readonly cause?: unknown;
+    },
+  ): AdapterOracleError;
+}
+
+interface CredentialBrokerLike {
+  get(name: string): { reveal(): string };
+}
+
+// SAFETY: @olympus/athena exports this constructor at runtime; the cast bridges stale workspace types.
+const OracleError = (AthenaModule as unknown as { OracleError: OracleErrorConstructor })
+  .OracleError;
+// SAFETY: @olympus/core exports this typed service key at runtime; the cast bridges stale workspace types.
+const CREDENTIAL_BROKER = (
+  CoreModule as unknown as { CREDENTIAL_BROKER: ServiceKey<CredentialBrokerLike> }
+).CREDENTIAL_BROKER;
 
 interface ContinuationState {
   readonly callId: string;
@@ -113,7 +196,7 @@ function serializeToolOutput(output: unknown): string {
   }
 }
 
-function inputFor(request: OracleRequest): OpenAIInput {
+function inputFor(request: AdapterOracleRequest): OpenAIInput {
   if (request.toolResult === undefined || request.continuation === undefined) {
     if (request.toolResult === undefined) {
       return request.objective;
@@ -139,7 +222,7 @@ function inputFor(request: OracleRequest): OpenAIInput {
   ];
 }
 
-function toolsFor(request: OracleRequest): readonly OpenAIFunctionTool[] {
+function toolsFor(request: AdapterOracleRequest): readonly OpenAIFunctionTool[] {
   return request.tools.map((tool) => ({
     name: tool.name,
     description: tool.description,
@@ -147,7 +230,7 @@ function toolsFor(request: OracleRequest): readonly OpenAIFunctionTool[] {
   }));
 }
 
-function toolCallFrom(call: OpenAIFunctionCall | undefined): ToolCall | undefined {
+function toolCallFrom(call: OpenAIFunctionCall | undefined): AdapterToolCall | undefined {
   if (call === undefined) {
     return undefined;
   }
@@ -158,7 +241,7 @@ function toolCallFrom(call: OpenAIFunctionCall | undefined): ToolCall | undefine
   };
 }
 
-function responseFrom(response: OpenAITransportResponse): OracleResponse {
+function responseFrom(response: OpenAITransportResponse): AdapterOracleResponse {
   const toolCall = toolCallFrom(response.functionCall);
   return {
     message: response.text,
@@ -175,7 +258,7 @@ function responseFrom(response: OpenAITransportResponse): OracleResponse {
   };
 }
 
-function transportRequest(model: string, request: OracleRequest): OpenAITransportRequest {
+function transportRequest(model: string, request: AdapterOracleRequest): OpenAITransportRequest {
   return {
     model,
     input: inputFor(request),
@@ -183,7 +266,7 @@ function transportRequest(model: string, request: OracleRequest): OpenAITranspor
   };
 }
 
-export function normalizeOpenAIError(error: unknown, signal?: AbortSignal): OracleError {
+export function normalizeOpenAIError(error: unknown, signal?: AbortSignal): AdapterOracleError {
   if (signal?.aborted || error instanceof APIUserAbortError) {
     return new OracleError("OpenAI request was cancelled.", {
       code: "cancelled",
@@ -249,7 +332,7 @@ export class OpenAIOracle implements Oracle {
     this.#model = model;
   }
 
-  async generate(request: OracleRequest): Promise<OracleResponse> {
+  async generate(request: AdapterOracleRequest): Promise<AdapterOracleResponse> {
     try {
       const response = await this.#transport.create(
         transportRequest(this.#model, request),
@@ -261,7 +344,7 @@ export class OpenAIOracle implements Oracle {
     }
   }
 
-  async *stream(request: OracleRequest): AsyncIterable<OracleStreamEvent> {
+  async *stream(request: AdapterOracleRequest): AsyncIterable<AdapterOracleStreamEvent> {
     try {
       for await (const event of this.#transport.stream(
         transportRequest(this.#model, request),
@@ -284,16 +367,43 @@ export class OpenAIOracle implements Oracle {
 }
 
 export function createOpenAIPlugin(options: OpenAIAdapterOptions = {}): OlympusPlugin {
-  const model = options.model ?? "gpt-5.6";
-  const credentialName = options.credentialName ?? "OPENAI_API_KEY";
+  const config = {
+    model: options.model ?? "gpt-5.6",
+    credentialName: options.credentialName ?? "OPENAI_API_KEY",
+  };
   const transportFactory = options.transportFactory ?? ((apiKey) => new SdkOpenAITransport(apiKey));
-  return {
-    name: "delphi/openai-responses",
+  const name = "delphi/openai-responses";
+  const plugin = {
+    name,
+    manifest: {
+      apiVersion: "olympus.dev/v1alpha1" as const,
+      id: name,
+      version: "0.1.0",
+      trust: { mode: "trusted-in-process" as const },
+      capabilities: {
+        requires: [CREDENTIAL_BROKER.name],
+        provides: [ORACLE.name],
+      },
+      configuration: {
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["model", "credentialName"],
+          properties: {
+            model: { type: "string", minLength: 1 },
+            credentialName: { type: "string", pattern: "^[A-Z][A-Z0-9_]*$" },
+          },
+        },
+      },
+    },
+    config,
     requires: [CREDENTIAL_BROKER],
     provides: [ORACLE],
-    setup(context) {
-      const apiKey = context.use(CREDENTIAL_BROKER).get(credentialName).reveal();
-      context.provide(ORACLE, new OpenAIOracle(transportFactory(apiKey), model));
+    setup(context: OlympusContext) {
+      const credentialBroker = context.use(CREDENTIAL_BROKER);
+      const apiKey = credentialBroker.get(config.credentialName).reveal();
+      context.provide(ORACLE, new OpenAIOracle(transportFactory(apiKey), config.model));
     },
   };
+  return plugin;
 }

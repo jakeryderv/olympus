@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { OlympusContext, OlympusPlugin } from "@olympus/core";
-import { serviceKey } from "@olympus/core";
+import { serviceKey, type OlympusContext, type OlympusPlugin } from "@olympus/core";
 
 export type JsonSchema = Readonly<Record<string, unknown>>;
 
@@ -201,15 +200,28 @@ class AthenaRunner implements AgentRunner {
 }
 
 export function createAthenaPlugin(): OlympusPlugin {
-  return {
+  const plugin = {
     name: "athena/default",
+    manifest: {
+      apiVersion: "olympus.dev/v1alpha1" as const,
+      id: "athena/default",
+      version: "0.1.0",
+      trust: { mode: "trusted-in-process" as const },
+      capabilities: {
+        requires: [ORACLE.name, TOOL_CATALOG.name],
+        provides: [AGENT_RUNNER.name],
+      },
+      configuration: { schema: { type: "object", additionalProperties: false } },
+    },
+    config: {},
     requires: [ORACLE, TOOL_CATALOG],
     provides: [AGENT_RUNNER],
-    setup(context) {
+    setup(context: OlympusContext) {
       context.provide(
         AGENT_RUNNER,
         new AthenaRunner(context.use(ORACLE), context.use(TOOL_CATALOG), context),
       );
     },
   };
+  return plugin;
 }

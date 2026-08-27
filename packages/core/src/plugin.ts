@@ -1,3 +1,4 @@
+import type { PluginManifest } from "./manifest.js";
 import type { Disposable, ServiceKey } from "./services.js";
 
 export interface OlympusEvent<T = unknown> {
@@ -17,7 +18,10 @@ export interface OlympusContext {
 }
 
 export interface OlympusPlugin {
+  /** Compatibility alias; validation requires this to equal manifest.id. */
   readonly name: string;
+  readonly manifest: PluginManifest;
+  readonly config: unknown;
   readonly requires?: readonly ServiceKey<unknown>[];
   readonly provides?: readonly ServiceKey<unknown>[];
   setup(context: OlympusContext): void | Promise<void>;

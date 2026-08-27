@@ -14,7 +14,9 @@ This replaces the overly broad claim that literally everything is a plugin. A re
 
 The v0 model is intentionally narrow:
 
+- every plugin declares `trusted-in-process` or `isolated-subprocess` in a validated manifest;
 - in-process plugin code is trusted application code;
+- the in-process host rejects isolated plugins until an out-of-process loader exists;
 - model output and model-requested effects are untrusted;
 - every model-requested effect must pass through the host-owned effect broker;
 - v0 permits read-only effects and denies privileged effects;
@@ -66,6 +68,10 @@ evals               behavioral regression cases
 ```
 
 New mythological packages are added only after a boundary has an independently testable contract or release reason.
+
+## Plugin admission
+
+Each plugin declares an alpha-versioned manifest with identity, semantic version, trust mode, capability names, and a JSON Schema for non-secret configuration. Olympus validates the complete plugin set before dependency resolution or setup, then checks manifest capability names against the typed runtime keys. Invalid configuration, malformed or duplicate manifests, mismatched declarations, and unsupported isolated loading fail closed before any setup runs. See [ADR 0007](adr/0007-validated-plugin-manifests.md).
 
 Oracle responses normalize text, function calls, opaque continuation, usage, request identity, streaming deltas, cancellation, and errors without exposing provider SDK types. The OpenAI adapter requests `OPENAI_API_KEY` from the host credential broker, uses `store: false`, and keeps function-call continuation state local. Deterministic fake transports cover the provider contract in CI. See [ADR 0006](adr/0006-credentials-and-model-provider-boundary.md).
 

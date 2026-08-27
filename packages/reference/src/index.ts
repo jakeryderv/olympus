@@ -1,7 +1,11 @@
 import { realpath, readdir, readFile, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
-import type { EffectBroker, OlympusContext, OlympusPlugin } from "@olympus/core";
-import { EFFECT_BROKER } from "@olympus/core";
+import {
+  EFFECT_BROKER,
+  type EffectBroker,
+  type OlympusContext,
+  type OlympusPlugin,
+} from "@olympus/core";
 import type {
   Oracle,
   OracleRequest,
@@ -59,13 +63,32 @@ class ReferenceOracle implements Oracle {
 }
 
 export function createModelPlugin(variant: ModelVariant): OlympusPlugin {
-  return {
-    name: `delphi/reference-${variant}`,
+  const config = { variant };
+  const name = `delphi/reference-${variant}`;
+  const plugin = {
+    name,
+    manifest: {
+      apiVersion: "olympus.dev/v1alpha1" as const,
+      id: name,
+      version: "0.1.0",
+      trust: { mode: "trusted-in-process" as const },
+      capabilities: { requires: [], provides: [ORACLE.name] },
+      configuration: {
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["variant"],
+          properties: { variant: { enum: ["echo", "uppercase", "inspection"] } },
+        },
+      },
+    },
+    config,
     provides: [ORACLE],
     setup(context: OlympusContext) {
-      context.provide(ORACLE, new ReferenceOracle(variant));
+      context.provide(ORACLE, new ReferenceOracle(config.variant));
     },
   };
+  return plugin;
 }
 
 interface PathInput {
@@ -140,14 +163,38 @@ async function confinedPath(root: string, requestedPath: string): Promise<string
 }
 
 export function createToolPlugin(variant: ToolVariant, repositoryRoot: string): OlympusPlugin {
-  const prefix = `hermes.${variant}`;
-  return {
-    name: `${prefix}-tools`,
+  const config = { variant, repositoryRoot };
+  const prefix = `hermes.${config.variant}`;
+  const name = `${prefix}-tools`;
+  const plugin = {
+    name,
+    manifest: {
+      apiVersion: "olympus.dev/v1alpha1" as const,
+      id: name,
+      version: "0.1.0",
+      trust: { mode: "trusted-in-process" as const },
+      capabilities: {
+        requires: [EFFECT_BROKER.name],
+        provides: [TOOL_CATALOG.name],
+      },
+      configuration: {
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["variant", "repositoryRoot"],
+          properties: {
+            variant: { enum: ["fake", "repository"] },
+            repositoryRoot: { type: "string", minLength: 1 },
+          },
+        },
+      },
+    },
+    config,
     requires: [EFFECT_BROKER],
     provides: [TOOL_CATALOG],
     async setup(context: OlympusContext) {
       const broker = context.use(EFFECT_BROKER);
-      if (variant === "fake") {
+      if (config.variant === "fake") {
         context.defer(broker.register(`${prefix}.list_files`, "read", () => ["README.md"]));
         context.defer(
           broker.register(`${prefix}.read_file`, "read", (input: unknown) => ({
@@ -156,7 +203,7 @@ export function createToolPlugin(variant: ToolVariant, repositoryRoot: string): 
           })),
         );
       } else {
-        const root = await realpath(repositoryRoot);
+        const root = await realpath(config.repositoryRoot);
         context.defer(
           broker.register(`${prefix}.list_files`, "read", async (input: unknown) => {
             const directory = await confinedPath(root, parsePathInput(input).path);
@@ -186,4 +233,5 @@ export function createToolPlugin(variant: ToolVariant, repositoryRoot: string): 
       context.provide(TOOL_CATALOG, new BrokeredToolCatalog(broker, prefix));
     },
   };
+  return plugin;
 }
