@@ -124,6 +124,30 @@ describe("Olympus CLI", () => {
     expect(await main(["thread", "verify-artifact", artifact, "--json"], context.io)).toBe(0);
     expect(JSON.parse(context.stdout.join(""))).toMatchObject({ valid: true });
 
+    const resumed = new SqliteThread({ filename: database, threadId });
+    resumed.append({ type: "quest.completed", actor: "test", payload: { answer: "done" } });
+    resumed.close();
+
+    context.stdout.length = 0;
+    expect(
+      await main(
+        ["thread", "retention-plan", threadId, "--db", database, "--artifact", artifact, "--json"],
+        context.io,
+      ),
+    ).toBe(0);
+    expect(JSON.parse(context.stdout.join(""))).toMatchObject({
+      artifact,
+      plan: {
+        mode: "dry-run",
+        removable: { firstSequence: 1, lastSequence: 1, eventCount: 1 },
+        retained: { firstSequence: 2, lastSequence: 2, eventCount: 1 },
+      },
+    });
+    const unchanged = new SqliteThread({ filename: database, threadId });
+    expect(unchanged.snapshot()).toHaveLength(2);
+    expect(unchanged.latestCheckpoint()?.throughSequence).toBe(1);
+    unchanged.close();
+
     context.stdout.length = 0;
     expect(
       await main(

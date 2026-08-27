@@ -97,6 +97,8 @@ describe("SqliteThread", () => {
 
     expect(thread.createCheckpoint()).toEqual(checkpoint);
     expect(thread.latestCheckpoint()).toEqual(checkpoint);
+    expect(thread.checkpointAt(threadId, 1)).toEqual(checkpoint);
+    expect(thread.checkpointAt(threadId, 2)).toBeUndefined();
     expect(thread.verifyCheckpoint(checkpoint)).toBe(true);
 
     thread.append({ type: "second", actor: "test", payload: { value: 2 } });

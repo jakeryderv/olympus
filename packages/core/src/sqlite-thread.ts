@@ -312,6 +312,21 @@ export class SqliteThread implements AuditThread {
     return row === undefined ? undefined : rowToCheckpoint(row);
   }
 
+  checkpointAt(threadId: string, throughSequence: number): PersistedThreadCheckpoint | undefined {
+    this.#assertOpen();
+    const row = this.#db
+      .select()
+      .from(threadCheckpoints)
+      .where(
+        and(
+          eq(threadCheckpoints.threadId, threadId),
+          eq(threadCheckpoints.throughSequence, throughSequence),
+        ),
+      )
+      .get();
+    return row === undefined ? undefined : rowToCheckpoint(row);
+  }
+
   verifyCheckpoint(checkpoint: PersistedThreadCheckpoint): boolean {
     this.#assertOpen();
     const events = this.#readThreadThrough(checkpoint.threadId, checkpoint.throughSequence);

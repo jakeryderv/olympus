@@ -49,6 +49,13 @@ export type CliCommand =
       readonly artifact: string;
       readonly json: boolean;
     }
+  | {
+      readonly kind: "thread-retention-plan";
+      readonly database: string;
+      readonly threadId: string;
+      readonly artifact: string;
+      readonly json: boolean;
+    }
   | { readonly kind: "help" };
 
 interface ParsedArguments {
@@ -64,6 +71,7 @@ interface ParsedArguments {
   readonly database: string;
   readonly threadId?: string;
   readonly output?: string;
+  readonly artifact?: string;
   readonly help: boolean;
 }
 
@@ -76,6 +84,7 @@ const valueOptions = new Set([
   "--db",
   "--thread-id",
   "--output",
+  "--artifact",
 ]);
 
 function parseFlags(args: readonly string[], cwd: string): ParsedArguments {
@@ -92,6 +101,7 @@ function parseFlags(args: readonly string[], cwd: string): ParsedArguments {
   let database = ".olympus/threads.sqlite";
   let threadId: string | undefined;
   let output: string | undefined;
+  let artifact: string | undefined;
 
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
@@ -128,6 +138,7 @@ function parseFlags(args: readonly string[], cwd: string): ParsedArguments {
       if (argument === "--db") database = value;
       if (argument === "--thread-id") threadId = value;
       if (argument === "--output") output = value;
+      if (argument === "--artifact") artifact = value;
       continue;
     }
     if (argument.startsWith("-")) {
@@ -149,6 +160,7 @@ function parseFlags(args: readonly string[], cwd: string): ParsedArguments {
     database,
     ...(threadId === undefined ? {} : { threadId }),
     ...(output === undefined ? {} : { output }),
+    ...(artifact === undefined ? {} : { artifact }),
     help,
   };
 }
@@ -199,8 +211,20 @@ export function parseCliCommand(args: readonly string[], cwd: string): CliComman
     if (second === "verify-artifact" && third !== undefined && rest.length === 0) {
       return { kind: "thread-verify-artifact", artifact: third, json: parsed.json };
     }
+    if (second === "retention-plan" && third !== undefined && rest.length === 0) {
+      if (parsed.artifact === undefined) {
+        throw new Error("Thread retention planning requires --artifact <path>.");
+      }
+      return {
+        kind: "thread-retention-plan",
+        database: parsed.database,
+        threadId: third,
+        artifact: parsed.artifact,
+        json: parsed.json,
+      };
+    }
     throw new Error(
-      "Usage: olympus thread list|show|replay|checkpoint|verify|export|verify-artifact",
+      "Usage: olympus thread list|show|replay|checkpoint|verify|export|verify-artifact|retention-plan",
     );
   }
 

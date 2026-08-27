@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -7,6 +7,7 @@ import {
   createThreadCheckpoint,
   InMemoryThread,
   parseThreadArtifact,
+  readProtectedThreadArtifact,
   serializeThreadArtifact,
   verifyThreadCheckpoint,
   writeThreadArtifact,
@@ -92,5 +93,13 @@ describe("Thread checkpoints and artifacts", () => {
     const original = await readFile(destination, "utf8");
     await expect(writeThreadArtifact(destination, artifact)).rejects.toThrow("already exists");
     expect(await readFile(destination, "utf8")).toBe(original);
+
+    await expect(readProtectedThreadArtifact(destination)).resolves.toEqual(artifact);
+    if (process.platform !== "win32") {
+      await chmod(destination, 0o640);
+      await expect(readProtectedThreadArtifact(destination)).rejects.toThrow(
+        "permissions are too broad",
+      );
+    }
   });
 });
