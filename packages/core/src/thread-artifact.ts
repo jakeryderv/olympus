@@ -240,6 +240,22 @@ export async function readThreadArtifact(path: string): Promise<ThreadArtifact> 
   return parseThreadArtifact(await readFile(path, "utf8"));
 }
 
+export async function readProtectedThreadArtifact(path: string): Promise<ThreadArtifact> {
+  const handle = await open(path, "r");
+  try {
+    const metadata = await handle.stat();
+    if (!metadata.isFile()) {
+      throw new Error(`Protected Thread artifact is not a regular file: ${path}`);
+    }
+    if (process.platform !== "win32" && (metadata.mode & 0o077) !== 0) {
+      throw new Error(`Protected Thread artifact permissions are too broad: ${path}`);
+    }
+    return parseThreadArtifact(await handle.readFile("utf8"));
+  } finally {
+    await handle.close();
+  }
+}
+
 export async function writeThreadArtifact(path: string, artifact: ThreadArtifact): Promise<string> {
   const destination = resolve(path);
   const directory = dirname(destination);

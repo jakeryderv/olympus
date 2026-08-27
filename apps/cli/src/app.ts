@@ -36,6 +36,7 @@ type PersistedThreadCheckpoint =
   import("../../../packages/core/dist/thread-artifact.js").PersistedThreadCheckpoint;
 type DeclaredSqliteThread = InstanceType<typeof CoreModule.SqliteThread>;
 type CurrentSqliteThread = DeclaredSqliteThread & {
+  checkpointAt(threadId: string, throughSequence: number): PersistedThreadCheckpoint | undefined;
   createCheckpoint(threadId?: string): PersistedThreadCheckpoint;
   latestCheckpoint(threadId?: string): PersistedThreadCheckpoint | undefined;
   verifyCheckpoint(checkpoint: PersistedThreadCheckpoint): boolean;
@@ -45,6 +46,8 @@ type CurrentThreadRuntime = {
     ...args: ConstructorParameters<typeof CoreModule.SqliteThread>
   ) => CurrentSqliteThread;
   readonly createThreadArtifact: typeof import("../../../packages/core/dist/thread-artifact.js").createThreadArtifact;
+  readonly planThreadRetention: typeof import("../../../packages/core/dist/thread-retention.js").planThreadRetention;
+  readonly readProtectedThreadArtifact: typeof import("../../../packages/core/dist/thread-artifact.js").readThreadArtifact;
   readonly readThreadArtifact: typeof import("../../../packages/core/dist/thread-artifact.js").readThreadArtifact;
   readonly writeThreadArtifact: typeof import("../../../packages/core/dist/thread-artifact.js").writeThreadArtifact;
 };
@@ -68,6 +71,8 @@ const {
   CREDENTIAL_BROKER,
   createThreadArtifact,
   EnvironmentCredentialBroker,
+  planThreadRetention,
+  readProtectedThreadArtifact,
   readThreadArtifact,
   SqliteThread,
   writeThreadArtifact,
@@ -92,6 +97,7 @@ Usage:
   olympus thread verify <thread-id> [--db path] [--json]
   olympus thread export <thread-id> --output <path> [--db path] [--json]
   olympus thread verify-artifact <path> [--json]
+  olympus thread retention-plan <thread-id> --artifact <path> [--db path] [--json]
 
 Run options:
   --model inspection|echo|uppercase|openai
@@ -250,6 +256,26 @@ async function handleThreadCommand(
       } else {
         io.writeStdout(
           `Verified Thread ${command.threadId} through sequence ${checkpoint.throughSequence}.\n`,
+        );
+      }
+      return;
+    }
+
+    if (command.kind === "thread-retention-plan") {
+      const path = resolve(io.cwd, command.artifact);
+      const artifact = await readProtectedThreadArtifact(path);
+      const checkpoint = reader.checkpointAt(command.threadId, artifact.checkpoint.throughSequence);
+      if (checkpoint === undefined) {
+        throw new Error(
+          `No persisted checkpoint for Thread ${command.threadId} at sequence ${artifact.checkpoint.throughSequence}.`,
+        );
+      }
+      const plan = planThreadRetention(events, checkpoint, artifact);
+      if (command.json) {
+        io.writeStdout(`${JSON.stringify({ artifact: path, plan }, null, 2)}\n`);
+      } else {
+        io.writeStdout(
+          `Retention dry-run for Thread ${command.threadId}: would remove sequences ${plan.removable.firstSequence}-${plan.removable.lastSequence} (${plan.removable.eventCount} events) and retain sequences ${plan.retained.firstSequence}-${plan.retained.lastSequence} (${plan.retained.eventCount} events).\nNo events were deleted. Protected artifact: ${path}\n`,
         );
       }
       return;

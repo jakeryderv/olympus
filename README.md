@@ -60,6 +60,13 @@ just run thread export <thread-id> --output ./artifacts/<thread-id>.json
 just run thread verify-artifact ./artifacts/<thread-id>.json
 ```
 
+After later events have been appended, preview checkpoint-anchored retention against that protected artifact. This is strictly a dry-run and never deletes events:
+
+```bash
+just run thread retention-plan <thread-id> \
+  --artifact ./artifacts/<thread-id>.json
+```
+
 Use another database with `--db path/to/threads.sqlite`, or disable persistence for a disposable run with `--ephemeral`. JSON run output includes the complete event Thread:
 
 ```bash
