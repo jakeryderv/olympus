@@ -6,6 +6,10 @@ import {
 } from "./thread-artifact.js";
 import type { ThreadEvent } from "./thread.js";
 
+export interface PreparedThreadRetentionAnchor extends PersistedThreadCheckpoint {
+  readonly preparedAt: string;
+}
+
 export interface ThreadRetentionRange {
   readonly firstSequence: number;
   readonly lastSequence: number;

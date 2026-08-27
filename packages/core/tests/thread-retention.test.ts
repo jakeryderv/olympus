@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  createAnchoredThreadCheckpoint,
   createThreadArtifact,
   createThreadCheckpoint,
   InMemoryThread,
   planThreadRetention,
+  verifyAnchoredThreadCheckpoint,
 } from "../src/index.js";
 
 function retentionFixture() {
   const thread = new InMemoryThread("thread-retention");
-  for (const type of ["first", "second", "third"] as const) {
+  for (const type of ["first", "second", "third", "fourth"] as const) {
     thread.append({ type, actor: "test", correlationId: "retention", payload: { type } });
   }
   const events = thread.snapshot();
@@ -41,14 +43,38 @@ describe("Thread retention planning", () => {
       },
       retained: {
         firstSequence: 3,
-        lastSequence: 3,
+        lastSequence: 4,
         firstEventId: fixture.events[2]?.eventId,
-        lastEventId: fixture.events[2]?.eventId,
-        eventCount: 1,
+        lastEventId: fixture.events[3]?.eventId,
+        eventCount: 2,
       },
     });
     expect(planThreadRetention(fixture.events, fixture.checkpoint, fixture.artifact)).toEqual(plan);
     expect(fixture.events).toEqual(before);
+  });
+
+  it("continues checkpoint verification from an immutable anchor", () => {
+    const fixture = retentionFixture();
+    const suffix = fixture.events.slice(fixture.checkpoint.eventCount);
+    const anchored = createAnchoredThreadCheckpoint(suffix, fixture.checkpoint);
+
+    expect(anchored).toEqual(createThreadCheckpoint(fixture.events));
+    expect(verifyAnchoredThreadCheckpoint(suffix, fixture.checkpoint, anchored)).toBe(true);
+    const retained = suffix[0];
+    if (retained === undefined) {
+      throw new Error("Expected a retained event.");
+    }
+    expect(
+      verifyAnchoredThreadCheckpoint(
+        [{ ...retained, actor: "tampered" }, ...suffix.slice(1)],
+        fixture.checkpoint,
+        anchored,
+      ),
+    ).toBe(false);
+    expect(
+      verifyAnchoredThreadCheckpoint([...suffix].reverse(), fixture.checkpoint, anchored),
+    ).toBe(false);
+    expect(verifyAnchoredThreadCheckpoint([], fixture.checkpoint, anchored)).toBe(false);
   });
 
   it("fails closed for artifact, live-prefix, and terminal-boundary mismatches", () => {

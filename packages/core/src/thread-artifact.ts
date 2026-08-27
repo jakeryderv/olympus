@@ -28,6 +28,12 @@ export interface ThreadArtifact {
   readonly events: readonly ThreadEvent[];
 }
 
+declare const protectedArtifactBrand: unique symbol;
+
+export type ProtectedThreadArtifact = ThreadArtifact & {
+  readonly [protectedArtifactBrand]: true;
+};
+
 function eventValue(event: ThreadEvent): { [key: string]: SafeAuditValue } {
   const value: { [key: string]: SafeAuditValue } = {
     actor: event.actor,
@@ -100,6 +106,51 @@ export function createThreadCheckpoint(events: readonly ThreadEvent[]): ThreadCh
   };
 }
 
+export function createAnchoredThreadCheckpoint(
+  events: readonly ThreadEvent[],
+  anchor: ThreadCheckpoint,
+): ThreadCheckpoint {
+  const first = events[0];
+  if (first === undefined) {
+    throw new Error("Cannot checkpoint an empty retained suffix.");
+  }
+  if (
+    anchor.schemaVersion !== 1 ||
+    anchor.algorithm !== "sha256" ||
+    !SHA256_HEX.test(anchor.digest) ||
+    anchor.eventCount !== anchor.throughSequence
+  ) {
+    throw new Error("Retention anchor has an invalid checkpoint shape.");
+  }
+  let digest: Buffer<ArrayBufferLike> = Buffer.from(anchor.digest, "hex");
+  for (const [index, event] of events.entries()) {
+    const expectedSequence = anchor.throughSequence + index + 1;
+    if (event.threadId !== anchor.threadId) {
+      throw new Error("Anchored checkpoint events must belong to the anchor Thread.");
+    }
+    if (event.sequence !== expectedSequence) {
+      throw new Error(`Anchored checkpoint events must continue at sequence ${expectedSequence}.`);
+    }
+    if (event.schemaVersion !== 1) {
+      throw new Error(`Unsupported Thread event schema version: ${event.schemaVersion}.`);
+    }
+    digest = nextDigest(digest, event);
+  }
+  const terminal = events.at(-1);
+  if (terminal === undefined) {
+    throw new Error("Cannot checkpoint an empty retained suffix.");
+  }
+  return {
+    schemaVersion: 1,
+    algorithm: "sha256",
+    threadId: anchor.threadId,
+    eventCount: anchor.eventCount + events.length,
+    throughSequence: terminal.sequence,
+    throughEventId: terminal.eventId,
+    digest: digest.toString("hex"),
+  };
+}
+
 function sameDigest(left: string, right: string): boolean {
   if (!SHA256_HEX.test(left) || !SHA256_HEX.test(right)) {
     return false;
@@ -107,21 +158,36 @@ function sameDigest(left: string, right: string): boolean {
   return timingSafeEqual(Buffer.from(left, "hex"), Buffer.from(right, "hex"));
 }
 
+function sameCheckpoint(left: ThreadCheckpoint, right: ThreadCheckpoint): boolean {
+  return (
+    left.schemaVersion === right.schemaVersion &&
+    left.algorithm === right.algorithm &&
+    left.threadId === right.threadId &&
+    left.eventCount === right.eventCount &&
+    left.throughSequence === right.throughSequence &&
+    left.throughEventId === right.throughEventId &&
+    sameDigest(left.digest, right.digest)
+  );
+}
+
 export function verifyThreadCheckpoint(
   events: readonly ThreadEvent[],
   checkpoint: ThreadCheckpoint,
 ): boolean {
   try {
-    const actual = createThreadCheckpoint(events);
-    return (
-      actual.schemaVersion === checkpoint.schemaVersion &&
-      actual.algorithm === checkpoint.algorithm &&
-      actual.threadId === checkpoint.threadId &&
-      actual.eventCount === checkpoint.eventCount &&
-      actual.throughSequence === checkpoint.throughSequence &&
-      actual.throughEventId === checkpoint.throughEventId &&
-      sameDigest(actual.digest, checkpoint.digest)
-    );
+    return sameCheckpoint(createThreadCheckpoint(events), checkpoint);
+  } catch {
+    return false;
+  }
+}
+
+export function verifyAnchoredThreadCheckpoint(
+  events: readonly ThreadEvent[],
+  anchor: ThreadCheckpoint,
+  checkpoint: ThreadCheckpoint,
+): boolean {
+  try {
+    return sameCheckpoint(createAnchoredThreadCheckpoint(events, anchor), checkpoint);
   } catch {
     return false;
   }
@@ -240,7 +306,7 @@ export async function readThreadArtifact(path: string): Promise<ThreadArtifact> 
   return parseThreadArtifact(await readFile(path, "utf8"));
 }
 
-export async function readProtectedThreadArtifact(path: string): Promise<ThreadArtifact> {
+export async function readProtectedThreadArtifact(path: string): Promise<ProtectedThreadArtifact> {
   const handle = await open(path, "r");
   try {
     const metadata = await handle.stat();
@@ -250,7 +316,7 @@ export async function readProtectedThreadArtifact(path: string): Promise<ThreadA
     if (process.platform !== "win32" && (metadata.mode & 0o077) !== 0) {
       throw new Error(`Protected Thread artifact permissions are too broad: ${path}`);
     }
-    return parseThreadArtifact(await handle.readFile("utf8"));
+    return parseThreadArtifact(await handle.readFile("utf8")) as ProtectedThreadArtifact;
   } finally {
     await handle.close();
   }
