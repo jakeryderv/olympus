@@ -6,7 +6,7 @@ Olympus is an experimental TypeScript harness that keeps agent behavior replacea
 
 ## Status
 
-The v0 architecture proof currently provides:
+The completed v0.1 local-harness milestone provides:
 
 - validated plugin manifests, explicit trust modes, and typed capability resolution;
 - plugin setup rollback and reverse-order disposal;
