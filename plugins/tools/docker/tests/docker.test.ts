@@ -1,8 +1,10 @@
+/// <reference types="node" />
+
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { TOOL_CATALOG } from "@olympus/athena";
+import { TOOL_CATALOG } from "@olympus/contracts";
 import * as CoreModule from "@olympus/core";
 import {
   EFFECT_BROKER,
@@ -184,15 +186,7 @@ describe("Docker-isolated subprocess effects", () => {
       });
     const active = await compose(client, undefined, true);
     const controller = new AbortController();
-    // SAFETY: Athena's current ToolCatalog accepts an optional cancellation signal.
-    const catalog = active.olympus.use(TOOL_CATALOG) as unknown as {
-      invoke(
-        call: { name: string; input: unknown },
-        actor: string,
-        correlationId: string,
-        signal?: AbortSignal,
-      ): Promise<unknown>;
-    };
+    const catalog = active.olympus.use(TOOL_CATALOG);
     const execution = catalog.invoke(
       { name: "shell_execute", input: { argv: ["sleep", "60"] } },
       "athena",

@@ -1,4 +1,4 @@
-import { ORACLE, type OracleRequest } from "@olympus/athena";
+import { ORACLE, type OracleRequest } from "@olympus/contracts";
 import { InMemoryThread, Olympus, hostService, type ServiceKey } from "@olympus/core";
 import { describe, expect, it } from "vitest";
 import {

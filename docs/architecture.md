@@ -55,20 +55,36 @@ CLI
                  └─ brokered read-only effects
 ```
 
-The implementation is split only where a contract is exercised:
+The repository separates host mechanisms, neutral contracts, and replaceable behavior:
 
 ```text
-packages/core       host kernel, lifecycle, effect broker, Thread
-packages/athena     default orchestration capability
-packages/reference  deterministic model and read-tool adapters
-packages/openai     OpenAI Responses adapter
-packages/docker     Docker-isolated privileged subprocess tool
-apps/cli            composition root and user interface
-tests               cross-package architecture proof
-evals               behavioral regression cases
+apps/
+  cli/                       composition root and user interface
+packages/
+  core/                      host kernel, lifecycle, brokers, and Thread
+  contracts/                 neutral Oracle, ToolCatalog, and AgentRunner contracts
+plugins/
+  agents/
+    athena/                  default orchestration implementation
+  providers/
+    openai/                  OpenAI Responses adapter
+  tools/
+    docker/                  Docker-isolated privileged subprocess tool
+  reference/                 deterministic development and demonstration adapters
+tests/                       cross-package architecture proof
+evals/                       behavioral regression cases
 ```
 
-New mythological packages are added only after a boundary has an independently testable contract or release reason.
+The organization convention is:
+
+- `apps/` contains executable composition roots and interfaces;
+- `packages/` contains host-owned mechanisms and provider-neutral shared contracts;
+- `plugins/` contains replaceable first-party behavior, grouped by capability;
+- mythological names identify concrete implementations such as Athena, not umbrella architectural domains;
+- each leaf package must have an exercised contract or an independent release reason;
+- directory placement does not confer trust—validated manifests and the host loader remain authoritative.
+
+`@olympus/contracts` owns the capability types and service keys so provider and tool plugins do not depend on Athena. Athena re-exports those contracts for v0 compatibility, but new code imports them from `@olympus/contracts`. See [ADR 0009](adr/0009-repository-package-taxonomy.md).
 
 ## Plugin admission
 

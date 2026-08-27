@@ -19,6 +19,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@olympus/contracts": "workspace:*",
     "@olympus/core": "workspace:*"
   }
 }

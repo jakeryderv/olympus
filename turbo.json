@@ -13,7 +13,7 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**", "tests/**", "vitest.config.*", "package.json"],
+      "inputs": ["src/**", "tests/**", "vitest*.config.*", "package.json"],
       "outputs": ["coverage/**"]
     },
     "clean": {

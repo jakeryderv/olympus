@@ -19,6 +19,14 @@ Use the repository interface rather than invoking underlying tools directly:
 - `just build`
 - `just check`
 
+## Repository organization
+
+- `apps/` contains executable composition roots and interfaces.
+- `packages/` contains host-owned mechanisms and neutral shared contracts.
+- `plugins/` contains replaceable first-party behavior grouped by capability.
+- Import Oracle, ToolCatalog, and AgentRunner APIs from `@olympus/contracts`; do not make plugins depend on Athena for neutral contracts.
+- Use mythological names for concrete implementations, not umbrella architectural domains.
+
 ## Constraints
 
 - Keep composition and trust enforcement in `packages/core`.

@@ -1,20 +1,22 @@
 import { realpath, readdir, readFile, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import {
+  ORACLE,
+  type Oracle,
+  type OracleRequest,
+  type OracleResponse,
+  TOOL_CATALOG,
+  type ToolCall,
+  type ToolCatalog,
+  type ToolDefinition,
+} from "@olympus/contracts";
+import {
   EFFECT_BROKER,
   type EffectBroker,
   type OlympusContext,
   type OlympusPlugin,
+  PLUGIN_MANIFEST_API_VERSION,
 } from "@olympus/core";
-import type {
-  Oracle,
-  OracleRequest,
-  OracleResponse,
-  ToolCall,
-  ToolCatalog,
-  ToolDefinition,
-} from "@olympus/athena";
-import { ORACLE, TOOL_CATALOG } from "@olympus/athena";
 
 export type ModelVariant = "echo" | "inspection" | "uppercase";
 export type ToolVariant = "fake" | "repository";
@@ -68,7 +70,7 @@ export function createModelPlugin(variant: ModelVariant): OlympusPlugin {
   const plugin = {
     name,
     manifest: {
-      apiVersion: "olympus.dev/v1alpha1" as const,
+      apiVersion: PLUGIN_MANIFEST_API_VERSION,
       id: name,
       version: "0.1.0",
       trust: { mode: "trusted-in-process" as const },
@@ -169,7 +171,7 @@ export function createToolPlugin(variant: ToolVariant, repositoryRoot: string): 
   const plugin = {
     name,
     manifest: {
-      apiVersion: "olympus.dev/v1alpha1" as const,
+      apiVersion: PLUGIN_MANIFEST_API_VERSION,
       id: name,
       version: "0.1.0",
       trust: { mode: "trusted-in-process" as const },

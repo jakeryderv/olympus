@@ -1,4 +1,5 @@
-import { AGENT_RUNNER, createAthenaPlugin } from "@olympus/athena";
+import { createAthenaPlugin } from "@olympus/athena";
+import { AGENT_RUNNER } from "@olympus/contracts";
 import {
   EFFECT_BROKER,
   HostEffectBroker,

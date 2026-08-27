@@ -3,17 +3,18 @@ import { randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { parse as parsePath } from "node:path";
 import {
-  EFFECT_BROKER,
-  type EffectBroker,
-  type OlympusContext,
-  type OlympusPlugin,
-} from "@olympus/core";
-import {
   TOOL_CATALOG,
   type ToolCall,
   type ToolCatalog,
   type ToolDefinition,
-} from "@olympus/athena";
+} from "@olympus/contracts";
+import {
+  EFFECT_BROKER,
+  type EffectBroker,
+  type OlympusContext,
+  type OlympusPlugin,
+  PLUGIN_MANIFEST_API_VERSION,
+} from "@olympus/core";
 
 export const DOCKER_SHELL_EFFECT = "shell.execute";
 
@@ -305,7 +306,7 @@ export function createDockerToolPlugin(options: DockerToolPluginOptions): Olympu
   const plugin = {
     name,
     manifest: {
-      apiVersion: "olympus.dev/v1alpha1" as const,
+      apiVersion: PLUGIN_MANIFEST_API_VERSION,
       id: name,
       version: "0.1.0",
       trust: { mode: "trusted-in-process" as const },
@@ -333,16 +334,8 @@ export function createDockerToolPlugin(options: DockerToolPluginOptions): Olympu
       if (workspaceRoot === parsePath(workspaceRoot).root)
         throw new Error("Docker workspace root cannot be a filesystem root.");
       const broker = context.use(EFFECT_BROKER);
-      // SAFETY: core's current broker passes the host execution context; this bridges stale workspace types.
-      const guardedBroker = broker as unknown as {
-        register<I, O>(
-          effect: string,
-          risk: "read" | "privileged",
-          handler: (input: I, execution: { readonly signal?: AbortSignal }) => O | Promise<O>,
-        ): { dispose(): void | Promise<void> };
-      };
       context.defer(
-        guardedBroker.register<ShellExecuteInput, ShellExecuteResult>(
+        broker.register<ShellExecuteInput, ShellExecuteResult>(
           DOCKER_SHELL_EFFECT,
           "privileged",
           async (input: ShellExecuteInput, execution: { readonly signal?: AbortSignal }) => {

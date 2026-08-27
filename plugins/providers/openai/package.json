@@ -1,5 +1,5 @@
 {
-  "name": "@olympus/reference",
+  "name": "@olympus/openai",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -19,7 +19,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@olympus/athena": "workspace:*",
-    "@olympus/core": "workspace:*"
+    "@olympus/contracts": "workspace:*",
+    "@olympus/core": "workspace:*",
+    "openai": "^7.5.0"
   }
 }

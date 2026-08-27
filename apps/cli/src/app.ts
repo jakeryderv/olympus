@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
-import { AGENT_RUNNER, createAthenaPlugin } from "@olympus/athena";
+import { createAthenaPlugin } from "@olympus/athena";
+import { AGENT_RUNNER } from "@olympus/contracts";
 import { createDockerToolPlugin } from "@olympus/docker";
 import { createOpenAIPlugin } from "@olympus/openai";
 import * as CoreModule from "@olympus/core";
