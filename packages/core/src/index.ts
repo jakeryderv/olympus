@@ -9,3 +9,4 @@ export * from "./plugin.js";
 export * from "./services.js";
 export * from "./sqlite-thread.js";
 export * from "./thread.js";
+export * from "./thread-artifact.js";

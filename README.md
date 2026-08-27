@@ -13,7 +13,7 @@ The completed v0.1 local-harness milestone provides:
 - replaceable model and tool-capability implementations, including OpenAI Responses;
 - a host-owned, default-deny effect broker;
 - confined read-only repository tools;
-- append-only, redacted in-memory and durable SQLite Thread events;
+- append-only, redacted in-memory and durable SQLite Thread events with verifiable checkpoints and protected export;
 - a minimal Athena orchestration loop and CLI;
 - conventional tests and behavioral regression evals.
 
@@ -49,6 +49,15 @@ Runs persist their audit Thread to `.olympus/threads.sqlite` by default and prin
 just run thread list
 just run thread show <thread-id>
 just run thread replay <thread-id> --json
+```
+
+Create and verify an immutable checkpoint, then export its redacted event prefix as a private, tamper-evident artifact. Export refuses to replace an existing path:
+
+```bash
+just run thread checkpoint <thread-id>
+just run thread verify <thread-id>
+just run thread export <thread-id> --output ./artifacts/<thread-id>.json
+just run thread verify-artifact ./artifacts/<thread-id>.json
 ```
 
 Use another database with `--db path/to/threads.sqlite`, or disable persistence for a disposable run with `--ephemeral`. JSON run output includes the complete event Thread:

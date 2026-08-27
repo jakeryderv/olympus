@@ -24,13 +24,13 @@ describe("SqliteThread", () => {
     const filename = await temporaryDatabase();
     const threadId = "00000000-0000-4000-8000-000000000010";
     const first = new SqliteThread({ filename, threadId });
-    expect(first.migrationVersion()).toBe(1);
+    expect(first.migrationVersion()).toBe(2);
     first.append({ type: "first", actor: "test", payload: { value: 1 } });
     first.append({ type: "second", actor: "test", payload: { value: 2 } });
     first.close();
 
     const reopened = new SqliteThread({ filename, threadId });
-    expect(reopened.migrationVersion()).toBe(1);
+    expect(reopened.migrationVersion()).toBe(2);
     expect(reopened.snapshot().map((event) => [event.sequence, event.type])).toEqual([
       [1, "first"],
       [2, "second"],
@@ -85,6 +85,46 @@ describe("SqliteThread", () => {
     const accepted = thread.append({ type: "accepted", actor: "test", payload: {} });
     expect(accepted.sequence).toBe(1);
     expect(thread.snapshot().map((event) => event.type)).toEqual(["accepted"]);
+    thread.close();
+  });
+
+  it("persists immutable checkpoints and verifies committed prefixes", async () => {
+    const filename = await temporaryDatabase();
+    const threadId = "00000000-0000-4000-8000-000000000030";
+    const thread = new SqliteThread({ filename, threadId });
+    thread.append({ type: "first", actor: "test", payload: { value: 1 } });
+    const checkpoint = thread.createCheckpoint();
+
+    expect(thread.createCheckpoint()).toEqual(checkpoint);
+    expect(thread.latestCheckpoint()).toEqual(checkpoint);
+    expect(thread.verifyCheckpoint(checkpoint)).toBe(true);
+
+    thread.append({ type: "second", actor: "test", payload: { value: 2 } });
+    expect(thread.verifyCheckpoint(checkpoint)).toBe(true);
+    const later = thread.createCheckpoint();
+    expect(later.throughSequence).toBe(2);
+    thread.close();
+
+    const reopened = new SqliteThread({ filename, threadId });
+    expect(reopened.latestCheckpoint()).toEqual(later);
+    expect(reopened.verifyCheckpoint(later)).toBe(true);
+    reopened.close();
+  });
+
+  it("detects persisted event tampering against a checkpoint", async () => {
+    const filename = await temporaryDatabase();
+    const thread = new SqliteThread({ filename });
+    thread.append({ type: "recorded", actor: "test", payload: { value: "original" } });
+    const checkpoint = thread.createCheckpoint();
+
+    const sabotage = new BetterSqlite3(filename);
+    sabotage
+      .prepare("UPDATE thread_events SET payload_json = ? WHERE thread_id = ?")
+      .run('{"value":"tampered"}', thread.id);
+    sabotage.close();
+
+    expect(thread.verifyCheckpoint(checkpoint)).toBe(false);
+    expect(() => thread.createCheckpoint()).toThrow("does not match the event history");
     thread.close();
   });
 

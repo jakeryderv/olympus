@@ -6,6 +6,23 @@ export const threadHeads = sqliteTable("thread_heads", {
   createdAt: text("created_at").notNull(),
 });
 
+export const threadCheckpoints = sqliteTable(
+  "thread_checkpoints",
+  {
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => threadHeads.threadId),
+    throughSequence: integer("through_sequence").notNull(),
+    throughEventId: text("through_event_id").notNull(),
+    eventCount: integer("event_count").notNull(),
+    algorithm: text("algorithm").notNull(),
+    digest: text("digest").notNull(),
+    schemaVersion: integer("schema_version").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.threadId, table.throughSequence] })],
+);
+
 export const threadEvents = sqliteTable(
   "thread_events",
   {
@@ -31,4 +48,4 @@ export const threadEvents = sqliteTable(
   ],
 );
 
-export const threadSchema = { threadEvents, threadHeads };
+export const threadSchema = { threadCheckpoints, threadEvents, threadHeads };

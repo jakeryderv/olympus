@@ -25,6 +25,30 @@ export type CliCommand =
       readonly replay: boolean;
       readonly json: boolean;
     }
+  | {
+      readonly kind: "thread-checkpoint";
+      readonly database: string;
+      readonly threadId: string;
+      readonly json: boolean;
+    }
+  | {
+      readonly kind: "thread-verify";
+      readonly database: string;
+      readonly threadId: string;
+      readonly json: boolean;
+    }
+  | {
+      readonly kind: "thread-export";
+      readonly database: string;
+      readonly threadId: string;
+      readonly output: string;
+      readonly json: boolean;
+    }
+  | {
+      readonly kind: "thread-verify-artifact";
+      readonly artifact: string;
+      readonly json: boolean;
+    }
   | { readonly kind: "help" };
 
 interface ParsedArguments {
@@ -39,6 +63,7 @@ interface ParsedArguments {
   readonly root: string;
   readonly database: string;
   readonly threadId?: string;
+  readonly output?: string;
   readonly help: boolean;
 }
 
@@ -50,6 +75,7 @@ const valueOptions = new Set([
   "--root",
   "--db",
   "--thread-id",
+  "--output",
 ]);
 
 function parseFlags(args: readonly string[], cwd: string): ParsedArguments {
@@ -65,6 +91,7 @@ function parseFlags(args: readonly string[], cwd: string): ParsedArguments {
   let root = cwd;
   let database = ".olympus/threads.sqlite";
   let threadId: string | undefined;
+  let output: string | undefined;
 
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
@@ -100,6 +127,7 @@ function parseFlags(args: readonly string[], cwd: string): ParsedArguments {
       if (argument === "--root") root = value;
       if (argument === "--db") database = value;
       if (argument === "--thread-id") threadId = value;
+      if (argument === "--output") output = value;
       continue;
     }
     if (argument.startsWith("-")) {
@@ -120,6 +148,7 @@ function parseFlags(args: readonly string[], cwd: string): ParsedArguments {
     root,
     database,
     ...(threadId === undefined ? {} : { threadId }),
+    ...(output === undefined ? {} : { output }),
     help,
   };
 }
@@ -143,7 +172,36 @@ export function parseCliCommand(args: readonly string[], cwd: string): CliComman
         json: parsed.json,
       };
     }
-    throw new Error("Usage: olympus thread list|show <thread-id>|replay <thread-id> [--db path]");
+    if (
+      (second === "checkpoint" || second === "verify") &&
+      third !== undefined &&
+      rest.length === 0
+    ) {
+      return {
+        kind: second === "checkpoint" ? "thread-checkpoint" : "thread-verify",
+        database: parsed.database,
+        threadId: third,
+        json: parsed.json,
+      };
+    }
+    if (second === "export" && third !== undefined && rest.length === 0) {
+      if (parsed.output === undefined) {
+        throw new Error("Thread export requires --output <path>.");
+      }
+      return {
+        kind: "thread-export",
+        database: parsed.database,
+        threadId: third,
+        output: parsed.output,
+        json: parsed.json,
+      };
+    }
+    if (second === "verify-artifact" && third !== undefined && rest.length === 0) {
+      return { kind: "thread-verify-artifact", artifact: third, json: parsed.json };
+    }
+    throw new Error(
+      "Usage: olympus thread list|show|replay|checkpoint|verify|export|verify-artifact",
+    );
   }
 
   const objectiveParts = first === "run" ? parsed.positionals.slice(1) : parsed.positionals;
