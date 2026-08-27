@@ -11,6 +11,12 @@ export interface EffectRequest<T = unknown> {
   readonly actor: string;
   readonly correlationId?: string;
   readonly approvalId?: string;
+  readonly signal?: AbortSignal;
+}
+
+export interface EffectExecutionContext {
+  readonly correlationId: string;
+  readonly signal?: AbortSignal;
 }
 
 export interface EffectMetadata {
@@ -33,7 +39,7 @@ export interface EffectBroker {
   register<I, O>(
     effect: string,
     risk: EffectRisk,
-    handler: (input: I) => O | Promise<O>,
+    handler: (input: I, context: EffectExecutionContext) => O | Promise<O>,
   ): Disposable;
   execute<I, O>(request: EffectRequest<I>): Promise<O>;
 }
@@ -50,7 +56,7 @@ export class ReadOnlyPolicy implements PolicyEvaluator {
 
 interface RegisteredEffect {
   readonly risk: EffectRisk;
-  readonly handler: (input: unknown) => unknown | Promise<unknown>;
+  readonly handler: (input: unknown, context: EffectExecutionContext) => unknown | Promise<unknown>;
 }
 
 export class HostEffectBroker implements EffectBroker {
@@ -66,14 +72,14 @@ export class HostEffectBroker implements EffectBroker {
   register<I, O>(
     effect: string,
     risk: EffectRisk,
-    handler: (input: I) => O | Promise<O>,
+    handler: (input: I, context: EffectExecutionContext) => O | Promise<O>,
   ): Disposable {
     if (this.#effects.has(effect)) {
       throw new Error(`Effect is already registered: ${effect}`);
     }
     const registration: RegisteredEffect = {
       risk,
-      handler: (input) => handler(input as I),
+      handler: (input, context) => handler(input as I, context),
     };
     this.#effects.set(effect, registration);
     return {
@@ -95,7 +101,11 @@ export class HostEffectBroker implements EffectBroker {
       type: "effect.requested",
       actor: request.actor,
       correlationId,
-      payload: { effect: request.effect, risk: registration.risk },
+      payload: {
+        effect: request.effect,
+        risk: registration.risk,
+        ...(request.approvalId === undefined ? {} : { approvalId: request.approvalId }),
+      },
     });
     const decision = await this.#policy.evaluate({
       effect: request.effect,
@@ -107,7 +117,11 @@ export class HostEffectBroker implements EffectBroker {
       type: decision.allowed ? "effect.authorized" : "effect.denied",
       actor: "olympus.host",
       correlationId,
-      payload: { effect: request.effect, reason: decision.reason },
+      payload: {
+        effect: request.effect,
+        reason: decision.reason,
+        ...(request.approvalId === undefined ? {} : { approvalId: request.approvalId }),
+      },
     });
     if (!decision.allowed) {
       throw new Error(`Effect denied: ${decision.reason}`);
@@ -119,7 +133,10 @@ export class HostEffectBroker implements EffectBroker {
       payload: { effect: request.effect },
     });
     try {
-      const output = await registration.handler(request.input);
+      const output = await registration.handler(request.input, {
+        correlationId,
+        ...(request.signal === undefined ? {} : { signal: request.signal }),
+      });
       this.#audit.append({
         type: "effect.completed",
         actor: "olympus.host",

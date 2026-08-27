@@ -1,10 +1,10 @@
 import { resolve } from "node:path";
 import { AGENT_RUNNER, createAthenaPlugin } from "@olympus/athena";
+import { createDockerToolPlugin } from "@olympus/docker";
 import { createOpenAIPlugin } from "@olympus/openai";
+import * as CoreModule from "@olympus/core";
 import {
-  CREDENTIAL_BROKER,
   EFFECT_BROKER,
-  EnvironmentCredentialBroker,
   HostEffectBroker,
   InMemoryThread,
   Olympus,
@@ -12,6 +12,8 @@ import {
   SqliteThread,
   hostService,
   type OlympusPlugin,
+  type PolicyEvaluator,
+  type ServiceKey,
   type ThreadEvent,
 } from "@olympus/core";
 import {
@@ -21,6 +23,29 @@ import {
   type ToolVariant,
 } from "@olympus/reference";
 import { type CliCommand, parseCliCommand } from "./arguments.js";
+
+interface ApprovalAuthorityLike {
+  issue(scope: { readonly effect: string; readonly actor: string }): { readonly id: string };
+}
+
+interface CredentialBrokerLike {
+  get(name: string): { reveal(): string };
+}
+
+// SAFETY: core exports these runtime APIs; the casts bridge stale workspace declarations.
+const CoreRuntime = CoreModule as unknown as {
+  ApprovalAuthority: new () => ApprovalAuthorityLike;
+  ApprovalPolicy: new (
+    authority: ApprovalAuthorityLike,
+    fallback: PolicyEvaluator,
+  ) => PolicyEvaluator;
+  CREDENTIAL_BROKER: ServiceKey<CredentialBrokerLike>;
+  EnvironmentCredentialBroker: new (
+    environment: Readonly<Record<string, string | undefined>>,
+  ) => CredentialBrokerLike;
+};
+const { ApprovalAuthority, ApprovalPolicy, CREDENTIAL_BROKER, EnvironmentCredentialBroker } =
+  CoreRuntime;
 
 export interface CliIo {
   readonly cwd: string;
@@ -41,7 +66,9 @@ Usage:
 Run options:
   --model inspection|echo|uppercase|openai
   --openai-model model-id (or OPENAI_MODEL)
-  --tools repository|fake
+  --tools repository|fake|docker
+  --docker-image name@sha256:digest (required for docker tools)
+  --allow-shell (issues one scoped, single-use approval)
   --root path
   --db path
   --thread-id id
@@ -55,6 +82,26 @@ function isReferenceModel(value: string): value is ModelVariant {
 
 function isToolVariant(value: string): value is ToolVariant {
   return ["fake", "repository"].includes(value);
+}
+
+function toolPlugin(
+  command: Extract<CliCommand, { kind: "run" }>,
+  approvalId?: string,
+): OlympusPlugin {
+  if (command.tools !== "docker") {
+    if (!isToolVariant(command.tools)) {
+      throw new Error(`Unknown tool variant: ${command.tools}`);
+    }
+    return createToolPlugin(command.tools, command.root);
+  }
+  if (command.dockerImage === undefined) {
+    throw new Error("Docker tools require --docker-image with a sha256-pinned image.");
+  }
+  return createDockerToolPlugin({
+    image: command.dockerImage,
+    workspaceRoot: command.root,
+    ...(approvalId === undefined ? {} : { approvalId }),
+  });
 }
 
 function oraclePlugin(command: Extract<CliCommand, { kind: "run" }>, io: CliIo): OlympusPlugin {
@@ -146,10 +193,6 @@ function inspectThreads(
 }
 
 async function runQuest(command: Extract<CliCommand, { kind: "run" }>, io: CliIo): Promise<void> {
-  if (!isToolVariant(command.tools)) {
-    throw new Error(`Unknown tool variant: ${command.tools}`);
-  }
-
   const persistentThread = command.ephemeral
     ? undefined
     : new SqliteThread({
@@ -157,7 +200,14 @@ async function runQuest(command: Extract<CliCommand, { kind: "run" }>, io: CliIo
         ...(command.threadId === undefined ? {} : { threadId: command.threadId }),
       });
   const thread = persistentThread ?? new InMemoryThread(command.threadId);
-  const broker = new HostEffectBroker(new ReadOnlyPolicy(), thread);
+  const authority = new ApprovalAuthority();
+  const approval = command.allowShell
+    ? authority.issue({ effect: "shell.execute", actor: "athena" })
+    : undefined;
+  const policy = command.allowShell
+    ? new ApprovalPolicy(authority, new ReadOnlyPolicy())
+    : new ReadOnlyPolicy();
+  const broker = new HostEffectBroker(policy, thread);
   const credentials = new EnvironmentCredentialBroker(io.environment);
   const olympus = new Olympus({
     audit: thread,
@@ -167,7 +217,7 @@ async function runQuest(command: Extract<CliCommand, { kind: "run" }>, io: CliIo
   try {
     await olympus.compose([
       createAthenaPlugin(),
-      createToolPlugin(command.tools, command.root),
+      toolPlugin(command, approval?.id),
       oraclePlugin(command, io),
     ]);
     const result = await olympus.use(AGENT_RUNNER).run(command.objective);

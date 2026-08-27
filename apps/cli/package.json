@@ -17,6 +17,7 @@
   "dependencies": {
     "@olympus/athena": "workspace:*",
     "@olympus/core": "workspace:*",
+    "@olympus/docker": "workspace:*",
     "@olympus/openai": "workspace:*",
     "@olympus/reference": "workspace:*"
   },

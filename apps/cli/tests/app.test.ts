@@ -83,6 +83,17 @@ describe("Olympus CLI", () => {
     reopened.close();
   });
 
+  it("requires an explicitly pinned image for Docker shell tools", async () => {
+    const context = await testContext();
+    expect(
+      await main(
+        ["run", "--model", "echo", "--tools", "docker", "--allow-shell", "--ephemeral", "hello"],
+        context.io,
+      ),
+    ).toBe(1);
+    expect(context.stderr.join("")).toContain("require --docker-image");
+  });
+
   it("fails closed when the OpenAI credential is unavailable", async () => {
     const context = await testContext();
     expect(
