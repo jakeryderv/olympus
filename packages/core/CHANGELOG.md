@@ -1,0 +1,11 @@
+# @olympus/core
+
+## 0.1.0
+
+### Minor Changes
+
+- ae2028a: Add scoped single-use approvals and Docker-only guarded subprocess tools with fail-closed availability checks, confinement, cancellation, timeout, and output limits.
+- b47e918: Add durable SQLite Thread storage with transactional sequence allocation, schema migrations, redaction, and idempotent append semantics.
+- 87360d7: Add provider-neutral Oracle streaming, cancellation, metadata, and error contracts plus an OpenAI Responses adapter backed by a host-owned credential broker.
+- 65744b1: Persist CLI runs to SQLite by default and add list, show, and render-only replay commands for Thread inspection.
+- bc15054: Require JSON-schema-validated plugin manifests with explicit trust classification, capability declarations, and pre-setup configuration validation.
