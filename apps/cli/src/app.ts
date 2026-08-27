@@ -10,7 +10,6 @@ import {
   InMemoryThread,
   Olympus,
   ReadOnlyPolicy,
-  SqliteThread,
   hostService,
   type OlympusPlugin,
   type PolicyEvaluator,
@@ -33,7 +32,25 @@ interface CredentialBrokerLike {
   get(name: string): { reveal(): string };
 }
 
-// SAFETY: core exports these runtime APIs; the casts bridge stale workspace declarations.
+type PersistedThreadCheckpoint =
+  import("../../../packages/core/dist/thread-artifact.js").PersistedThreadCheckpoint;
+type DeclaredSqliteThread = InstanceType<typeof CoreModule.SqliteThread>;
+type CurrentSqliteThread = DeclaredSqliteThread & {
+  createCheckpoint(threadId?: string): PersistedThreadCheckpoint;
+  latestCheckpoint(threadId?: string): PersistedThreadCheckpoint | undefined;
+  verifyCheckpoint(checkpoint: PersistedThreadCheckpoint): boolean;
+};
+type CurrentThreadRuntime = {
+  readonly SqliteThread: new (
+    ...args: ConstructorParameters<typeof CoreModule.SqliteThread>
+  ) => CurrentSqliteThread;
+  readonly createThreadArtifact: typeof import("../../../packages/core/dist/thread-artifact.js").createThreadArtifact;
+  readonly readThreadArtifact: typeof import("../../../packages/core/dist/thread-artifact.js").readThreadArtifact;
+  readonly writeThreadArtifact: typeof import("../../../packages/core/dist/thread-artifact.js").writeThreadArtifact;
+};
+
+// SAFETY: core exports these runtime APIs; the cast bridges stale workspace declarations while
+// deriving every new Thread API from the built core declaration rather than duplicating contracts.
 const CoreRuntime = CoreModule as unknown as {
   ApprovalAuthority: new () => ApprovalAuthorityLike;
   ApprovalPolicy: new (
@@ -44,9 +61,17 @@ const CoreRuntime = CoreModule as unknown as {
   EnvironmentCredentialBroker: new (
     environment: Readonly<Record<string, string | undefined>>,
   ) => CredentialBrokerLike;
-};
-const { ApprovalAuthority, ApprovalPolicy, CREDENTIAL_BROKER, EnvironmentCredentialBroker } =
-  CoreRuntime;
+} & CurrentThreadRuntime;
+const {
+  ApprovalAuthority,
+  ApprovalPolicy,
+  CREDENTIAL_BROKER,
+  createThreadArtifact,
+  EnvironmentCredentialBroker,
+  readThreadArtifact,
+  SqliteThread,
+  writeThreadArtifact,
+} = CoreRuntime;
 
 export interface CliIo {
   readonly cwd: string;
@@ -63,6 +88,10 @@ Usage:
   olympus thread list [--db path] [--json]
   olympus thread show <thread-id> [--db path] [--json]
   olympus thread replay <thread-id> [--db path] [--json]
+  olympus thread checkpoint <thread-id> [--db path] [--json]
+  olympus thread verify <thread-id> [--db path] [--json]
+  olympus thread export <thread-id> --output <path> [--db path] [--json]
+  olympus thread verify-artifact <path> [--json]
 
 Run options:
   --model inspection|echo|uppercase|openai
@@ -121,21 +150,8 @@ function databasePath(cwd: string, filename: string): string {
   return resolve(cwd, filename);
 }
 
-interface ThreadSummaryView {
-  readonly id: string;
-  readonly createdAt: string;
-  readonly eventCount: number;
-}
-
-interface ThreadInspector {
-  listThreads(): readonly ThreadSummaryView[];
-  readThread(threadId: string): readonly ThreadEvent[];
-  close(): void;
-}
-
-function openThreadInspector(filename: string): ThreadInspector {
-  const thread: object = new SqliteThread({ filename });
-  return thread as ThreadInspector;
+function openThreadInspector(filename: string): CurrentSqliteThread {
+  return new SqliteThread({ filename });
 }
 
 function renderEvent(event: ThreadEvent): string {
@@ -143,10 +159,25 @@ function renderEvent(event: ThreadEvent): string {
   return `${heading}\n${JSON.stringify(event.payload, null, 2)}\n`;
 }
 
-function inspectThreads(
-  command: Extract<CliCommand, { kind: "thread-list" | "thread-show" }>,
+async function handleThreadCommand(
+  command: Exclude<CliCommand, { kind: "help" } | { kind: "run" }>,
   io: CliIo,
-): void {
+): Promise<void> {
+  if (command.kind === "thread-verify-artifact") {
+    const path = resolve(io.cwd, command.artifact);
+    const artifact = await readThreadArtifact(path);
+    if (command.json) {
+      io.writeStdout(
+        `${JSON.stringify({ path, valid: true, checkpoint: artifact.checkpoint }, null, 2)}\n`,
+      );
+    } else {
+      io.writeStdout(
+        `Verified artifact for Thread ${artifact.checkpoint.threadId} through sequence ${artifact.checkpoint.throughSequence}.\n`,
+      );
+    }
+    return;
+  }
+
   const filename = databasePath(io.cwd, command.database);
   const reader = openThreadInspector(filename);
   try {
@@ -168,25 +199,71 @@ function inspectThreads(
     if (events.length === 0) {
       throw new Error(`Thread not found: ${command.threadId}`);
     }
-    if (command.json) {
+    if (command.kind === "thread-show") {
+      if (command.json) {
+        io.writeStdout(
+          `${JSON.stringify(
+            {
+              threadId: command.threadId,
+              mode: command.replay ? "render-only replay" : "inspection",
+              events,
+            },
+            null,
+            2,
+          )}\n`,
+        );
+        return;
+      }
       io.writeStdout(
-        `${JSON.stringify(
-          {
-            threadId: command.threadId,
-            mode: command.replay ? "render-only replay" : "inspection",
-            events,
-          },
-          null,
-          2,
-        )}\n`,
+        `Thread ${command.threadId} — ${events.length} events (${command.replay ? "render-only replay" : "inspection"})\n`,
       );
+      for (const event of events) {
+        io.writeStdout(renderEvent(event));
+      }
       return;
     }
-    io.writeStdout(
-      `Thread ${command.threadId} — ${events.length} events (${command.replay ? "render-only replay" : "inspection"})\n`,
-    );
-    for (const event of events) {
-      io.writeStdout(renderEvent(event));
+
+    if (command.kind === "thread-checkpoint") {
+      const checkpoint = reader.createCheckpoint(command.threadId);
+      if (command.json) {
+        io.writeStdout(`${JSON.stringify({ database: filename, checkpoint }, null, 2)}\n`);
+      } else {
+        io.writeStdout(
+          `Checkpointed Thread ${command.threadId} through sequence ${checkpoint.throughSequence} (${checkpoint.digest}).\n`,
+        );
+      }
+      return;
+    }
+
+    if (command.kind === "thread-verify") {
+      const checkpoint = reader.latestCheckpoint(command.threadId);
+      if (checkpoint === undefined) {
+        throw new Error(`No checkpoint for Thread: ${command.threadId}`);
+      }
+      if (!reader.verifyCheckpoint(checkpoint)) {
+        throw new Error(`Thread checkpoint verification failed: ${command.threadId}`);
+      }
+      if (command.json) {
+        io.writeStdout(
+          `${JSON.stringify({ database: filename, valid: true, checkpoint }, null, 2)}\n`,
+        );
+      } else {
+        io.writeStdout(
+          `Verified Thread ${command.threadId} through sequence ${checkpoint.throughSequence}.\n`,
+        );
+      }
+      return;
+    }
+
+    const checkpoint = reader.createCheckpoint(command.threadId);
+    const artifact = createThreadArtifact(events.slice(0, checkpoint.eventCount), checkpoint);
+    const path = await writeThreadArtifact(resolve(io.cwd, command.output), artifact);
+    if (command.json) {
+      io.writeStdout(`${JSON.stringify({ path, checkpoint }, null, 2)}\n`);
+    } else {
+      io.writeStdout(
+        `Exported Thread ${command.threadId} through sequence ${checkpoint.throughSequence} to ${path}.\n`,
+      );
     }
   } finally {
     reader.close();
@@ -265,8 +342,8 @@ export async function main(args: readonly string[], io: CliIo): Promise<number> 
       io.writeStdout(helpText);
       return 0;
     }
-    if (command.kind === "thread-list" || command.kind === "thread-show") {
-      inspectThreads(command, io);
+    if (command.kind !== "run") {
+      await handleThreadCommand(command, io);
       return 0;
     }
     await runQuest(command, io);

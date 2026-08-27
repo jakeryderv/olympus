@@ -1,6 +1,6 @@
 /// <reference types="node" />
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SqliteThread } from "@olympus/core";
@@ -81,6 +81,62 @@ describe("Olympus CLI", () => {
     const reopened = new SqliteThread({ filename: database, threadId });
     expect(reopened.snapshot()).toHaveLength(1);
     reopened.close();
+  });
+
+  it("checkpoints, verifies, exports, and verifies protected Thread artifacts", async () => {
+    const context = await testContext();
+    const database = join(context.cwd, "threads.sqlite");
+    const threadId = "00000000-0000-4000-8000-000000000040";
+    const thread = new SqliteThread({ filename: database, threadId });
+    thread.append({
+      type: "credential.observed",
+      actor: "test",
+      payload: { token: "must-not-export", visible: "yes" },
+    });
+    thread.close();
+
+    expect(
+      await main(["thread", "checkpoint", threadId, "--db", database, "--json"], context.io),
+    ).toBe(0);
+    const checkpointOutput = JSON.parse(context.stdout.join("")) as {
+      checkpoint: { threadId: string; throughSequence: number };
+    };
+    expect(checkpointOutput.checkpoint).toMatchObject({ threadId, throughSequence: 1 });
+
+    context.stdout.length = 0;
+    expect(await main(["thread", "verify", threadId, "--db", database], context.io)).toBe(0);
+    expect(context.stdout.join("")).toContain(`Verified Thread ${threadId}`);
+
+    const artifact = join(context.cwd, "artifacts", "thread.json");
+    context.stdout.length = 0;
+    expect(
+      await main(
+        ["thread", "export", threadId, "--db", database, "--output", artifact],
+        context.io,
+      ),
+    ).toBe(0);
+    expect((await stat(artifact)).mode & 0o777).toBe(0o600);
+    const serialized = await readFile(artifact, "utf8");
+    expect(serialized).not.toContain("must-not-export");
+    expect(serialized).toContain("[REDACTED]");
+
+    context.stdout.length = 0;
+    expect(await main(["thread", "verify-artifact", artifact, "--json"], context.io)).toBe(0);
+    expect(JSON.parse(context.stdout.join(""))).toMatchObject({ valid: true });
+
+    context.stdout.length = 0;
+    expect(
+      await main(
+        ["thread", "export", threadId, "--db", database, "--output", artifact],
+        context.io,
+      ),
+    ).toBe(1);
+    expect(context.stderr.join("")).toContain("already exists");
+
+    await writeFile(artifact, serialized.replace('"visible":"yes"', '"visible":"tampered"'));
+    context.stderr.length = 0;
+    expect(await main(["thread", "verify-artifact", artifact], context.io)).toBe(1);
+    expect(context.stderr.join("")).toContain("failed checkpoint verification");
   });
 
   it("requires an explicitly pinned image for Docker shell tools", async () => {

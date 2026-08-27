@@ -2,9 +2,14 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import BetterSqlite3 from "better-sqlite3";
-import { and, asc, count, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq, lte } from "drizzle-orm";
 import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { threadEvents, threadHeads, threadSchema } from "./thread-schema.js";
+import { threadCheckpoints, threadEvents, threadHeads, threadSchema } from "./thread-schema.js";
+import {
+  createThreadCheckpoint,
+  type PersistedThreadCheckpoint,
+  verifyThreadCheckpoint,
+} from "./thread-artifact.js";
 import {
   appendEventHash,
   type AppendEvent,
@@ -15,7 +20,7 @@ import {
   type ThreadEvent,
 } from "./thread.js";
 
-const CURRENT_MIGRATION_VERSION = 1;
+const CURRENT_MIGRATION_VERSION = 2;
 
 const migrations = [
   {
@@ -47,6 +52,23 @@ const migrations = [
         ON thread_events(thread_id, idempotency_key);
     `,
   },
+  {
+    version: 2,
+    sql: `
+      CREATE TABLE thread_checkpoints (
+        thread_id TEXT NOT NULL,
+        through_sequence INTEGER NOT NULL,
+        through_event_id TEXT NOT NULL,
+        event_count INTEGER NOT NULL,
+        algorithm TEXT NOT NULL,
+        digest TEXT NOT NULL,
+        schema_version INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (thread_id, through_sequence),
+        FOREIGN KEY (thread_id) REFERENCES thread_heads(thread_id)
+      );
+    `,
+  },
 ] as const;
 
 export interface SqliteThreadOptions {
@@ -61,6 +83,7 @@ export interface ThreadSummary {
 }
 
 type ThreadEventRow = typeof threadEvents.$inferSelect;
+type ThreadCheckpointRow = typeof threadCheckpoints.$inferSelect;
 type ThreadDatabase = BetterSQLite3Database<typeof threadSchema>;
 
 function prepareDatabasePath(filename: string): string {
@@ -93,6 +116,22 @@ function rowToEvent(row: ThreadEventRow): ThreadEvent {
     ...(row.causationId === null ? {} : { causationId: row.causationId }),
     payload,
     schemaVersion: 1,
+  };
+}
+
+function rowToCheckpoint(row: ThreadCheckpointRow): PersistedThreadCheckpoint {
+  if (row.algorithm !== "sha256" || row.schemaVersion !== 1) {
+    throw new Error("Stored Thread checkpoint uses an unsupported schema.");
+  }
+  return {
+    threadId: row.threadId,
+    throughSequence: row.throughSequence,
+    throughEventId: row.throughEventId,
+    eventCount: row.eventCount,
+    algorithm: row.algorithm,
+    digest: row.digest,
+    schemaVersion: row.schemaVersion,
+    createdAt: row.createdAt,
   };
 }
 
@@ -229,6 +268,56 @@ export class SqliteThread implements AuditThread {
       .map((row) => ({ ...row, eventCount: Number(row.eventCount) }));
   }
 
+  createCheckpoint(threadId: string = this.id): PersistedThreadCheckpoint {
+    this.#assertOpen();
+    const transaction = this.#sqlite.transaction(() => {
+      const events = this.#readThreadThrough(threadId, Number.MAX_SAFE_INTEGER);
+      const checkpoint = createThreadCheckpoint(events);
+      const existing = this.#db
+        .select()
+        .from(threadCheckpoints)
+        .where(
+          and(
+            eq(threadCheckpoints.threadId, threadId),
+            eq(threadCheckpoints.throughSequence, checkpoint.throughSequence),
+          ),
+        )
+        .get();
+      if (existing !== undefined) {
+        const persisted = rowToCheckpoint(existing);
+        if (!verifyThreadCheckpoint(events, persisted)) {
+          throw new Error("Stored Thread checkpoint does not match the event history.");
+        }
+        return persisted;
+      }
+
+      const persisted: PersistedThreadCheckpoint = {
+        ...checkpoint,
+        createdAt: new Date().toISOString(),
+      };
+      this.#db.insert(threadCheckpoints).values(persisted).run();
+      return persisted;
+    });
+    return transaction.immediate();
+  }
+
+  latestCheckpoint(threadId: string = this.id): PersistedThreadCheckpoint | undefined {
+    this.#assertOpen();
+    const row = this.#db
+      .select()
+      .from(threadCheckpoints)
+      .where(eq(threadCheckpoints.threadId, threadId))
+      .orderBy(desc(threadCheckpoints.throughSequence))
+      .get();
+    return row === undefined ? undefined : rowToCheckpoint(row);
+  }
+
+  verifyCheckpoint(checkpoint: PersistedThreadCheckpoint): boolean {
+    this.#assertOpen();
+    const events = this.#readThreadThrough(checkpoint.threadId, checkpoint.throughSequence);
+    return verifyThreadCheckpoint(events, checkpoint);
+  }
+
   migrationVersion(): number {
     this.#assertOpen();
     const row = this.#sqlite
@@ -271,6 +360,16 @@ export class SqliteThread implements AuditThread {
     if (this.migrationVersion() !== CURRENT_MIGRATION_VERSION) {
       throw new Error("SQLite Thread migration did not reach the expected version.");
     }
+  }
+
+  #readThreadThrough(threadId: string, throughSequence: number): readonly ThreadEvent[] {
+    return this.#db
+      .select()
+      .from(threadEvents)
+      .where(and(eq(threadEvents.threadId, threadId), lte(threadEvents.sequence, throughSequence)))
+      .orderBy(asc(threadEvents.sequence))
+      .all()
+      .map(rowToEvent);
   }
 
   #assertOpen(): void {
