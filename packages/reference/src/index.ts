@@ -1,0 +1,172 @@
+import { realpath, readdir, readFile, stat } from "node:fs/promises";
+import { isAbsolute, relative, resolve } from "node:path";
+import type { EffectBroker, OlympusContext, OlympusPlugin } from "@olympus/core";
+import { EFFECT_BROKER } from "@olympus/core";
+import type {
+  Oracle,
+  OracleRequest,
+  OracleResponse,
+  ToolCall,
+  ToolCatalog,
+  ToolDefinition,
+} from "@olympus/athena";
+import { ORACLE, TOOL_CATALOG } from "@olympus/athena";
+
+export type ModelVariant = "echo" | "inspection" | "uppercase";
+export type ToolVariant = "fake" | "repository";
+
+class ReferenceOracle implements Oracle {
+  readonly #variant: ModelVariant;
+
+  constructor(variant: ModelVariant) {
+    this.#variant = variant;
+  }
+
+  async generate(request: OracleRequest): Promise<OracleResponse> {
+    if (request.toolResult !== undefined) {
+      return {
+        message: `Tool result (${request.toolResult.name}): ${JSON.stringify(request.toolResult.output)}`,
+      };
+    }
+    if (this.#variant === "echo") {
+      return { message: `Echo: ${request.objective}` };
+    }
+    if (this.#variant === "uppercase") {
+      return { message: request.objective.toUpperCase() };
+    }
+    const readMatch = /^read\s+(.+)$/i.exec(request.objective.trim());
+    if (readMatch?.[1] !== undefined) {
+      return {
+        message: "Inspecting a file.",
+        toolCall: { name: "read_file", input: { path: readMatch[1] } },
+      };
+    }
+    if (/^list(?:\s+files)?$/i.test(request.objective.trim())) {
+      return {
+        message: "Listing repository files.",
+        toolCall: { name: "list_files", input: { path: "." } },
+      };
+    }
+    return {
+      message: "The deterministic inspection model supports `list` and `read <path>`.",
+    };
+  }
+}
+
+export function createModelPlugin(variant: ModelVariant): OlympusPlugin {
+  return {
+    name: `delphi/reference-${variant}`,
+    provides: [ORACLE],
+    setup(context: OlympusContext) {
+      context.provide(ORACLE, new ReferenceOracle(variant));
+    },
+  };
+}
+
+interface PathInput {
+  readonly path: string;
+}
+
+const definitions: readonly ToolDefinition[] = [
+  { name: "list_files", description: "List entries inside the configured repository root." },
+  {
+    name: "read_file",
+    description: "Read a UTF-8 text file inside the configured repository root.",
+  },
+];
+
+class BrokeredToolCatalog implements ToolCatalog {
+  readonly #broker: EffectBroker;
+  readonly #prefix: string;
+
+  constructor(broker: EffectBroker, prefix: string) {
+    this.#broker = broker;
+    this.#prefix = prefix;
+  }
+
+  definitions(): readonly ToolDefinition[] {
+    return definitions;
+  }
+
+  invoke(call: ToolCall, actor: string, correlationId: string): Promise<unknown> {
+    if (!definitions.some((definition) => definition.name === call.name)) {
+      return Promise.reject(new Error(`Unknown tool: ${call.name}`));
+    }
+    return this.#broker.execute({
+      effect: `${this.#prefix}.${call.name}`,
+      input: call.input,
+      actor,
+      correlationId,
+    });
+  }
+}
+
+function parsePathInput(input: unknown): PathInput {
+  if (
+    input === null ||
+    typeof input !== "object" ||
+    !("path" in input) ||
+    typeof input.path !== "string"
+  ) {
+    throw new Error("Tool input must contain a string path.");
+  }
+  return { path: input.path };
+}
+
+async function confinedPath(root: string, requestedPath: string): Promise<string> {
+  const candidate = await realpath(resolve(root, requestedPath));
+  const pathFromRoot = relative(root, candidate);
+  if (pathFromRoot.startsWith("..") || isAbsolute(pathFromRoot)) {
+    throw new Error("Path escapes the configured repository root.");
+  }
+  return candidate;
+}
+
+export function createToolPlugin(variant: ToolVariant, repositoryRoot: string): OlympusPlugin {
+  const prefix = `hermes.${variant}`;
+  return {
+    name: `${prefix}-tools`,
+    requires: [EFFECT_BROKER],
+    provides: [TOOL_CATALOG],
+    async setup(context: OlympusContext) {
+      const broker = context.use(EFFECT_BROKER);
+      if (variant === "fake") {
+        context.defer(broker.register(`${prefix}.list_files`, "read", () => ["README.md"]));
+        context.defer(
+          broker.register(`${prefix}.read_file`, "read", (input: unknown) => ({
+            path: parsePathInput(input).path,
+            content: "deterministic fixture",
+          })),
+        );
+      } else {
+        const root = await realpath(repositoryRoot);
+        context.defer(
+          broker.register(`${prefix}.list_files`, "read", async (input: unknown) => {
+            const directory = await confinedPath(root, parsePathInput(input).path);
+            const entries = await readdir(directory, { withFileTypes: true });
+            return entries
+              .map((entry) => ({
+                name: entry.name,
+                kind: entry.isDirectory() ? "directory" : "file",
+              }))
+              .sort((left, right) => left.name.localeCompare(right.name));
+          }),
+        );
+        context.defer(
+          broker.register(`${prefix}.read_file`, "read", async (input: unknown) => {
+            const path = await confinedPath(root, parsePathInput(input).path);
+            const metadata = await stat(path);
+            if (!metadata.isFile()) {
+              throw new Error("Requested path is not a file.");
+            }
+            if (metadata.size > 65_536) {
+              throw new Error("File exceeds the v0 read limit of 64 KiB.");
+            }
+            return { path: relative(root, path), content: await readFile(path, "utf8") };
+          }),
+        );
+      }
+      context.provide(TOOL_CATALOG, new BrokeredToolCatalog(broker, prefix));
+    },
+  };
+}

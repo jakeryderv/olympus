@@ -1,0 +1,36 @@
+name: Feature proposal
+description: Propose a scoped capability or improvement.
+title: "proposal: "
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: What problem should Olympus solve?
+    validations:
+      required: true
+  - type: textarea
+    id: value
+    attributes:
+      label: Why it matters
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List observable, testable outcomes.
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies and constraints
+      description: Include relevant ADRs, trust boundaries, or blocked work.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [runtime, cli, api, infra, plugins]
+    validations:
+      required: true

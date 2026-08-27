@@ -1,0 +1,36 @@
+name: Engineering task
+description: Track a bounded implementation or maintenance objective.
+title: "task: "
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why is this work needed now?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Use a checklist of observable outcomes.
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Link blocked or blocking issues and relevant ADRs.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [runtime, cli, api, infra, plugins]
+    validations:
+      required: true

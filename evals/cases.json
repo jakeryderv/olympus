@@ -1,0 +1,26 @@
+[
+  {
+    "name": "echo preserves objective",
+    "model": "echo",
+    "tools": "fake",
+    "objective": "map the plugin graph",
+    "expectedText": "Echo: map the plugin graph",
+    "expectedToolCalls": []
+  },
+  {
+    "name": "uppercase adapter is replaceable",
+    "model": "uppercase",
+    "tools": "fake",
+    "objective": "hello olympus",
+    "expectedText": "HELLO OLYMPUS",
+    "expectedToolCalls": []
+  },
+  {
+    "name": "inspection uses a brokered read tool",
+    "model": "inspection",
+    "tools": "fake",
+    "objective": "list",
+    "expectedText": "README.md",
+    "expectedToolCalls": ["list_files"]
+  }
+]

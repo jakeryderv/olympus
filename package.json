@@ -1,0 +1,40 @@
+{
+  "name": "olympus",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A plugin-first AI agent harness. Build your own pantheon.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22 <25",
+    "pnpm": ">=10 <11"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "changeset": "changeset",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm build && pnpm test && pnpm eval",
+    "clean": "turbo run clean && rm -rf .turbo coverage",
+    "dev": "pnpm --filter @olympus/cli dev",
+    "eval": "vitest run --config vitest.config.ts evals",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
+    "test": "vitest run tests packages",
+    "typecheck": "turbo run typecheck && tsc -p tsconfig.json --noEmit",
+    "version": "changeset version"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.10",
+    "@olympus/athena": "workspace:*",
+    "@olympus/core": "workspace:*",
+    "@olympus/reference": "workspace:*",
+    "@changesets/cli": "^3.0.1",
+    "@types/node": "^26.3.0",
+    "@vitest/coverage-v8": "^4.1.11",
+    "tsx": "^4.23.12",
+    "turbo": "^2.10.12",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}
